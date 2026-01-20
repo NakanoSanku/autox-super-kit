@@ -35,12 +35,6 @@ declare let bounds
 declare let boundsInside
 declare let boundsContains
 
-// 基于坐标的操作
-declare let setScreenMetrics
-declare let press
-declare let swipe
-declare let gesture
-
 declare class JavaAdapter {
   constructor(...p: any[])
   tap
