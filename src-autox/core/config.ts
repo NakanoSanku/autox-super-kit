@@ -15,3 +15,17 @@ export const defaultLogConfig: LogConfig = {
   fileName: 'app.log',
   maxFileSize: 5 * 1024 * 1024,
 }
+
+/** 图片缓存模块配置 */
+export interface ImageCacheConfig {
+  /** 缓存超时时间 (ms) */
+  timeout: number
+  /** 自动清理间隔 (ms) */
+  cleanupInterval: number
+}
+
+export const defaultImageCacheConfig: ImageCacheConfig = {
+  timeout: 60 * 1000,
+  cleanupInterval: 30 * 1000,
+}
+

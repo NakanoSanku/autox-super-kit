@@ -577,12 +577,7 @@ interface FindColorOptions {
   /** 颜色相似度，范围为 0~1 */
   similarity?: number
 }
-interface Rect {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-}
+
 /**
  * 找图选项
  */
@@ -590,7 +585,7 @@ interface FindImageOptions {
   /** 图片相似度，取值范围为 0~1，默认值为 0.9 */
   threshold?: number
   /** 找图区域 */
-  region?: [number, number] | [number, number, number, number] | Rect
+  region?: [number, number] | [number, number, number, number]
   /** 图像金字塔层次 */
   level?: number
 }
