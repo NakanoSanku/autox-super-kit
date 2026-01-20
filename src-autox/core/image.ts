@@ -16,6 +16,12 @@ interface CacheStats {
     keys: string[];
 }
 
+interface Rect {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
 /**
  * 加载并缓存模板图片
  * @param path - 图片路径
@@ -95,7 +101,7 @@ export function findImageEx(
     template: string,
     options?: FindImageOptions,
     src?: Image,
-): Point | null {
+): Rect | null {
     const templateImg = loadTemplate(template);
     let srcImg = src;
     let needRecycleSrc = false;
@@ -108,7 +114,16 @@ export function findImageEx(
     }
 
     try {
-        return images.findImage(srcImg, templateImg, options);
+        const result = images.findImage(srcImg, templateImg, options);
+        if (result) {
+            return {
+                x: result.x,
+                y: result.y,
+                width: templateImg.width,
+                height: templateImg.height
+            };
+        }
+        return null;
     } finally {
         if (needRecycleSrc && srcImg) {
             srcImg.recycle();
