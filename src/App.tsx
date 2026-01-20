@@ -1,225 +1,101 @@
-import { useEffect, useState } from 'react'
-import jpgFile from './assets/head.jpg'
-import jsonFile from './assets/test.json'
+import { useState } from 'react'
 
-/**
- * 将 调用 aj 封装为 Promise
- * @param aj_fn_name 函数名
- */
-function invokeFn<T = any>(aj_fn_name: string): Promise<T>
-/**
- * 将 调用 aj 封装为 Promise
- * @param aj_fn_name 函数名 / 字符串代码
- * @param data 参数 / "[code]"
- */
-function invokeFn<T = any>(aj_fn_name: string, data: any): Promise<T>
-/**
- * 将 调用 aj 封装为 Promise
- * @param aj_fn_name 函数名
- * @param data 参数数组 (例如：[ 1,"hh",false ])
- */
-function invokeFn<T = any>(aj_fn_name: string, data: any[]): Promise<T>
-function invokeFn<T = any>(aj_fn_name: string, data: any | any[] = undefined) {
+function invokeFn<T = any>(name: string, data?: any): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    MyAutoxBridge.invoke(aj_fn_name, data, (r: T & { __message: string }) => {
-      // 发生错误
-      if (r?.__message) {
-        // 如果未用 .catch 处理，则会自动显示到 console.error()
+    MyAutoxBridge.invoke(name, data, (r: T & { __message?: string }) => {
+      if (r?.__message)
         reject(r.__message)
-      } else {
+      else
         resolve(r)
-      }
     })
   })
 }
 
-/**
- * 执行 aj 支持的代码
- *
- * (底层使用 new Function(),
- * 本质是一个匿名函数，
- * 所以传入的 code 参数是 函数体)
- *
- * 如果需要获取返回值，需要 return , 比如 return 1+1
- * @param code
- */
-async function execCode(code: string) {
-  return await invokeFn(code, '[code]')
-}
-
 function App() {
-  const [fn_1, setFn_1] = useState<number>(0)
-  const [fn_2, setFn_2] = useState<boolean>(false)
-  const [fn_2_1, setFn_2_1] = useState<boolean>(false)
-  const [fn_3, setFn_3] = useState<string>('')
-  const [fn_4, setFn_4] = useState<{ id: number; name: string }[]>([])
-  const [fn_5, setFn_5] = useState<boolean>(false)
-  const [exec_code, setExec_code] = useState<string>('')
-  const [exec_code_2, setExec_code_2] = useState<string>('')
+  const [status, setStatus] = useState<string>('')
+  const [result, setResult] = useState<string>('')
 
-  useEffect(() => {
-    // 将 web 函数挂载到 全局 window 对象上，暴露给 aj, 在 aj_fn_4 中调用
-    // @ts-expect-error window 上面的 ts 类型
-    window.test_aj_call_web = (a, b, c) => {
-      return '我是 web 返回值'
-    }
-  }, [])
+  const showLog = () => invokeFn('show_log')
 
-  const show_log_window = () => {
-    invokeFn('show_log_window')
+  const gameInit = async () => {
+    setResult('初始化中...')
+    const r = await invokeFn('game_init')
+    setResult(JSON.stringify(r))
   }
 
-  const show_settings_window = () => {
-    invokeFn('show_settings_window')
+  const gameConfigure = async () => {
+    const r = await invokeFn('game_configure', [300, 100])
+    setResult(JSON.stringify(r))
   }
 
-  const aj_fn_0 = () => {
-    invokeFn('aj_fn_0')
+  const gameRegisterScene = async () => {
+    const r = await invokeFn('game_register_scene')
+    setResult(JSON.stringify(r))
   }
 
-  const aj_fn_1 = async () => {
-    const r = await invokeFn('aj_fn_1')
-    setFn_1(r)
+  const gameRegisterTask = async () => {
+    const r = await invokeFn('game_register_task')
+    setResult(JSON.stringify(r))
   }
 
-  const aj_fn_2 = async () => {
-    const r = await invokeFn('aj_fn_2')
-    setFn_2(r)
+  const gameStart = async () => {
+    const r = await invokeFn('game_start')
+    setResult(JSON.stringify(r))
   }
 
-  const aj_fn_2_1 = async () => {
-    const r = await invokeFn('aj_fn_2', '小明')
-    setFn_2_1(r)
+  const gamePause = async () => {
+    const r = await invokeFn('game_pause')
+    setResult(JSON.stringify(r))
   }
 
-  const aj_fn_3 = async () => {
-    const r = await invokeFn('aj_fn_3')
-    setFn_3(r)
+  const gameResume = async () => {
+    const r = await invokeFn('game_resume')
+    setResult(JSON.stringify(r))
   }
 
-  const aj_fn_4 = async () => {
-    const r = await invokeFn('aj_fn_4', [111, '小明 111', 555])
-    setFn_4(r)
+  const gameStop = async () => {
+    const r = await invokeFn('game_stop')
+    setResult(JSON.stringify(r))
   }
 
-  const aj_fn_5 = async () => {
-    const r = await invokeFn('aj_fn_5', {
-      id: 999,
-      name: '小明 999',
-    })
-
-    setFn_5(r)
-  }
-
-  const exec_code_fn = async () => {
-    // 可以执行任何 aj 代码 ,使用 new Function() 实现，
-    // 参数为 方法体，获取返回值需要加 return
-    const r = await execCode(`
-      toast('123');
-      let num = random(1, 9)
-      return app.autojs.versionName + "--- 随机数:" + num;
-      `)
-
-    // let r = await execCode("return files.read('/sdcard/demo.txt')");
-    setExec_code(`aj 版本号:${r}`)
-  }
-
-  const exec_code_2_fn = async () => {
-    const r = await execCode(`
-      toast('123');
-      let num = random(1, 9)
-      // autox 的 Promise 底层为 bluebird, 
-      // 没有 await 等关键字，只能通过方法的形式使用 Promise
-      return new Promise((resolve, reject) => {
-          let r = app.autojs.versionName + "--- 随机数:" + num;
-          resolve(r)
-      })
-      `)
-
-    setExec_code_2(`aj 版本号:${r}`)
+  const gameStatus = async () => {
+    const r = await invokeFn('game_status')
+    setStatus(JSON.stringify(r, null, 2))
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-      }}
-    >
-      <img
-        width={40}
-        height={40}
-        src={jpgFile}
-        alt="图片"
-      />
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <h3 style={{ textAlign: 'center', margin: 0 }}>Game 框架测试</h3>
 
-      <h4
-        style={{
-          textAlign: 'center',
-        }}
-      >
-        这里是 React Web 界面
-      </h4>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={showLog}>日志窗口</button>
+        <button onClick={gameInit}>初始化</button>
+        <button onClick={gameConfigure}>配置</button>
+      </div>
 
-      <pre>{jsonFile.data}</pre>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={gameRegisterScene}>注册场景</button>
+        <button onClick={gameRegisterTask}>注册任务</button>
+      </div>
 
-      <button onClick={show_log_window}>show_log_window</button>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={gameStart}>启动</button>
+        <button onClick={gamePause}>暂停</button>
+        <button onClick={gameResume}>恢复</button>
+        <button onClick={gameStop}>停止</button>
+      </div>
 
-      <button onClick={show_settings_window}>show_settings_window</button>
+      <button onClick={gameStatus}>刷新状态</button>
 
-      <button onClick={aj_fn_0}>aj_fn_0</button>
+      <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, margin: 0, whiteSpace: 'pre-wrap' }}>
+        {result}
+      </pre>
 
-      <button onClick={aj_fn_1}>
-        aj_fn_1 ---
-        {fn_1}
-      </button>
-
-      <button onClick={aj_fn_2}>
-        aj_fn_2 ---
-        {fn_2 ? '成功' : 'false'}
-      </button>
-
-      <button onClick={aj_fn_2_1}>
-        aj_fn_2_1 ---
-        {fn_2_1 ? '成功' : 'false'}
-      </button>
-
-      <button onClick={aj_fn_3}>
-        aj_fn_3 ---
-        {fn_3}
-      </button>
-
-      <button onClick={aj_fn_4}>
-        aj_fn_4 ---
-        {fn_4.length}
-      </button>
-
-      <button onClick={aj_fn_5}>
-        aj_fn_5 ---
-        {fn_5 && '成功'}
-      </button>
-
-      <button onClick={exec_code_fn}>
-        执行 aj 代码 ---
-        {exec_code}
-      </button>
-
-      <button onClick={exec_code_2_fn}>
-        执行 aj 代码 2 ---
-        {exec_code_2}
-      </button>
-
-      {fn_4?.map((v) => {
-        return (
-          <p key={v.id}>
-            {v.id}
-            ---
-            {v.name}
-          </p>
-        )
-      })}
+      <pre style={{ fontSize: 11, background: '#e8f5e9', padding: 8, margin: 0, whiteSpace: 'pre-wrap' }}>
+        {status}
+      </pre>
     </div>
   )
 }
+
 export default App
