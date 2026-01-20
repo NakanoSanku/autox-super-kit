@@ -1,6 +1,5 @@
 import CloneDeep from 'lodash.clonedeep'
 import { AutojsWebRuntime } from '../src-runtime/runtime-autojs'
-import { init_native_ui } from './native-ui-demo'
 // import { JianGuoYunUtil } from './utils/jian-guo-yun-util'
 // import { SQLiteUtil } from './utils/sqlite-util'
 // import { get_date_now, get_date_now_2 } from './utils/util'
@@ -10,29 +9,12 @@ import { init_native_ui } from './native-ui-demo'
 const g_web_url = 'autojs-todo-web-url'
 const g_web_type: any = 'autojs-todo-web-type'
 
-ui.layout(
-  <>
-    <vertical>
-      <button id="btn_native_ui">原生 UI + Web</button>
-      <button id="btn_web_ui">纯 Web</button>
-    </vertical>
-  </>,
-)
-
 // 如果 原生 ui 中没有用到 webview 就不需要这个类了
 const web_runtime = new AutojsWebRuntime()
 
-ui.btn_native_ui.click(async () => {
-  // 创建 原生 ui
-  init_native_ui()
-  // 初始化 web
-  web_runtime.init_web_view_ui(g_web_url, g_web_type, ui.web)
-})
+// 纯 web 项目 (内部会自动创建一个 webview)
+web_runtime.init_web_view_ui(g_web_url, g_web_type)
 
-ui.btn_web_ui.click(() => {
-  // 纯 web 项目 (内部会自动创建一个 webview)
-  web_runtime.init_web_view_ui(g_web_url, g_web_type)
-})
 
 // 打开 aj 自带的日志界面
 web_runtime.on('show_log_window', () => {
