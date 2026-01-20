@@ -29,3 +29,21 @@ export const defaultImageCacheConfig: ImageCacheConfig = {
   cleanupInterval: 30 * 1000,
 }
 
+/** 人类化交互配置 */
+export interface ActionConfig {
+  /** 点击标准差系数 (0-1) */
+  clickSigma: number
+  /** 默认点击后延迟 (ms) */
+  clickDelay: number
+  /** 滑动默认步数 */
+  swipeSteps: number
+  /** 滑动默认延迟 (ms) */
+  swipeDelay: number
+}
+
+export const defaultActionConfig: ActionConfig = {
+  clickSigma: 0.2,
+  clickDelay: 0,
+  swipeSteps: 10,
+  swipeDelay: 0,
+}
