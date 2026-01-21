@@ -138,6 +138,16 @@ export interface InterruptRequest {
 export type TaskEventType = 'start' | 'loop' | 'success' | 'pause' | 'resume' | 'stop' | 'error' | 'finish'
 
 /**
+ * 进入任务的原因
+ */
+export type EnterReason = 'start' | 'resume'
+
+/**
+ * 离开任务的原因
+ */
+export type LeaveReason = 'complete' | 'suspend' | 'stop' | 'error'
+
+/**
  * 事件回调
  */
 export type TaskEventCallback = (data?: any) => void

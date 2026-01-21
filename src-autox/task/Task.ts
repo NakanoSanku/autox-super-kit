@@ -2,7 +2,7 @@
  * 任务基类
  */
 
-import type { RunnerOptions, TaskContext } from './types'
+import type { EnterReason, LeaveReason, RunnerOptions, TaskContext } from './types'
 import { createLogger } from '../core/logger'
 import { ExecuteResult } from './types'
 
@@ -37,10 +37,10 @@ abstract class Task {
   }
 
   /**
-   * 任务初始化（可选）
-   * 在第一次 execute 前调用一次
+   * 进入任务时调用（可选）
+   * @param reason - 进入原因：'start' 首次启动 | 'resume' 从中断恢复
    */
-  setup?(): void
+  onEnter?(reason: EnterReason): void
 
   /**
    * 单次循环体逻辑
@@ -49,10 +49,10 @@ abstract class Task {
   abstract execute(): ExecuteResult
 
   /**
-   * 任务清理（可选）
-   * 在任务结束后调用一次
+   * 离开任务时调用（可选）
+   * @param reason - 离开原因：'complete' 正常完成 | 'suspend' 被中断挂起 | 'stop' 外部停止 | 'error' 发生错误
    */
-  cleanup?(): void
+  onLeave?(reason: LeaveReason): void
 
   /**
    * 检测是否在任务场景内（可选）

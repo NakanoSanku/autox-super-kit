@@ -231,65 +231,75 @@ class TaskRunner {
 
     this.emit('start')
 
+    // 记录离开原因
+    let leaveReason: 'complete' | 'stop' | 'error' = 'complete'
+
     try {
-      task.setup?.()
+      task.onEnter?.('start')
     }
     catch (e) {
-      this.log.error(`setup 异常: ${e}`)
+      this.log.error(`onEnter 异常: ${e}`)
       throw e
     }
 
-    while (this.ctx.count < times && !this.isStopped()) {
-      this.checkPause()
-      if (this.isStopped())
-        break
+    try {
+      while (this.ctx.count < times && !this.isStopped()) {
+        this.checkPause()
+        if (this.isStopped()) {
+          leaveReason = 'stop'
+          break
+        }
 
-      let result: ExecuteResult
+        let result: ExecuteResult
+        try {
+          result = task.execute()
+        }
+        catch (e) {
+          this.log.error(`execute 异常: ${e}`)
+          result = ExecuteResult.ERROR
+        }
+
+        this.ctx.loops++
+        this.emit('loop', { result, loops: this.ctx.loops })
+
+        switch (result) {
+          case ExecuteResult.CONTINUE:
+            break
+          case ExecuteResult.SUCCESS:
+            this.ctx.count++
+            this.emit('success', { count: this.ctx.count })
+            // 只在 SUCCESS 时才检查中断（安全中断点）
+            this.pollInterrupt()
+            break
+          case ExecuteResult.STOP:
+            this._state = RunnerState.STOPPED
+            leaveReason = 'stop'
+            break
+          case ExecuteResult.ERROR:
+            this._state = RunnerState.STOPPED
+            leaveReason = 'error'
+            this.result = {
+              successCount: this.ctx.count,
+              totalLoops: this.ctx.loops,
+              duration: Date.now() - this.ctx.startTime,
+              reason: 'error',
+            }
+            break
+        }
+
+        if (this._state === RunnerState.STOPPED)
+          break
+
+        this.sleep(interval)
+      }
+    }
+    finally {
       try {
-        result = task.execute()
+        task.onLeave?.(leaveReason)
       }
       catch (e) {
-        this.log.error(`execute 异常: ${e}`)
-        result = ExecuteResult.ERROR
+        this.log.error(`onLeave 异常: ${e}`)
       }
-
-      this.ctx.loops++
-      this.emit('loop', { result, loops: this.ctx.loops })
-
-      switch (result) {
-        case ExecuteResult.CONTINUE:
-          break
-        case ExecuteResult.SUCCESS:
-          this.ctx.count++
-          this.emit('success', { count: this.ctx.count })
-          // 只在 SUCCESS 时才检查中断（安全中断点）
-          this.pollInterrupt()
-          break
-        case ExecuteResult.STOP:
-          this._state = RunnerState.STOPPED
-          break
-        case ExecuteResult.ERROR:
-          this._state = RunnerState.STOPPED
-          this.result = {
-            successCount: this.ctx.count,
-            totalLoops: this.ctx.loops,
-            duration: Date.now() - this.ctx.startTime,
-            reason: 'error',
-          }
-          break
-      }
-
-      if (this._state === RunnerState.STOPPED)
-        break
-
-      this.sleep(interval)
-    }
-
-    try {
-      task.cleanup?.()
-    }
-    catch (e) {
-      this.log.error(`cleanup 异常: ${e}`)
     }
 
     if (!this.result) {
@@ -333,6 +343,14 @@ class TaskRunner {
 
     if (!request)
       return
+
+    // 调用 onLeave('suspend') 钩子（挂起当前任务）
+    try {
+      this.currentTask!.onLeave?.('suspend')
+    }
+    catch (e) {
+      this.log.error(`onLeave(suspend) 异常: ${e}`)
+    }
 
     // 保存主任务状态（只在第一次中断时保存）
     this.taskStack.push({
@@ -382,49 +400,60 @@ class TaskRunner {
     })
 
     try {
-      task.setup?.()
+      task.onEnter?.('start')
     }
     catch (e) {
-      this.log.error(`中断任务 setup 异常: ${e}`)
+      this.log.error(`中断任务 onEnter 异常: ${e}`)
       return
     }
 
-    while (interruptCtx.count < times && !this.isStopped()) {
-      this.checkPause()
-      if (this.isStopped())
-        break
-
-      let result: ExecuteResult
-      try {
-        result = task.execute()
-      }
-      catch (e) {
-        this.log.error(`中断任务 execute 异常: ${e}`)
-        break
-      }
-
-      interruptCtx.loops++
-
-      switch (result) {
-        case ExecuteResult.SUCCESS:
-          interruptCtx.count++
-          break
-        case ExecuteResult.STOP:
-        case ExecuteResult.ERROR:
-          break
-      }
-
-      if (result === ExecuteResult.STOP || result === ExecuteResult.ERROR)
-        break
-
-      this.sleep(interval)
-    }
+    let leaveReason: 'complete' | 'stop' | 'error' = 'complete'
 
     try {
-      task.cleanup?.()
+      while (interruptCtx.count < times && !this.isStopped()) {
+        this.checkPause()
+        if (this.isStopped()) {
+          leaveReason = 'stop'
+          break
+        }
+
+        let result: ExecuteResult
+        try {
+          result = task.execute()
+        }
+        catch (e) {
+          this.log.error(`中断任务 execute 异常: ${e}`)
+          leaveReason = 'error'
+          break
+        }
+
+        interruptCtx.loops++
+
+        switch (result) {
+          case ExecuteResult.SUCCESS:
+            interruptCtx.count++
+            break
+          case ExecuteResult.STOP:
+            leaveReason = 'stop'
+            break
+          case ExecuteResult.ERROR:
+            leaveReason = 'error'
+            break
+        }
+
+        if (result === ExecuteResult.STOP || result === ExecuteResult.ERROR)
+          break
+
+        this.sleep(interval)
+      }
     }
-    catch (e) {
-      this.log.error(`中断任务 cleanup 异常: ${e}`)
+    finally {
+      try {
+        task.onLeave?.(leaveReason)
+      }
+      catch (e) {
+        this.log.error(`中断任务 onLeave 异常: ${e}`)
+      }
     }
 
     this.log.info(`中断任务完成: ${request.name}`)
@@ -447,6 +476,14 @@ class TaskRunner {
     })
 
     this.ensureScene(frame.task)
+
+    // 调用 onEnter('resume') 钩子（恢复任务）
+    try {
+      frame.task.onEnter?.('resume')
+    }
+    catch (e) {
+      this.log.error(`onEnter(resume) 异常: ${e}`)
+    }
 
     this.log.info('已恢复主任务')
   }
