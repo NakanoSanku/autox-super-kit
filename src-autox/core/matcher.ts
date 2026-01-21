@@ -505,6 +505,7 @@ type TemplateFactoryOptions = ImageTemplateOptions | MultiColorTemplateOptions |
 function $(options: ImageTemplateOptions): ImageTemplate
 function $(options: MultiColorTemplateOptions): MultiColorTemplate
 function $(options: OcrTemplateOptions): OcrTemplate
+function $(options: TemplateFactoryOptions): Template
 function $(options: TemplateFactoryOptions): Template {
     if ('templatePath' in options) {
         return new ImageTemplate(options)

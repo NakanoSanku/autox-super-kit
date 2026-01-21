@@ -2,6 +2,7 @@
  * 统一导航层
  */
 
+import type { TemplateFactoryOptions } from '../core/matcher'
 import type { Task } from './Task'
 import { createLogger } from '../core/logger'
 import { $ } from '../core/matcher'
@@ -11,14 +12,11 @@ const log = createLogger('Navigator')
 /**
  * 导航器配置
  */
-/** 匹配模板类型 */
-type MatchTemplate = Parameters<typeof $>[0]
-
 interface NavigatorConfig {
   /** 主界面标志模板 */
-  mainSceneTemplate?: MatchTemplate
-  /** 关闭按钮模板列表（支持文本、图片等任意匹配模板） */
-  closeTemplates?: MatchTemplate[]
+  mainSceneTemplate?: TemplateFactoryOptions
+  /** 关闭按钮模板列表（支持文本、图片、多点找色等任意匹配模板） */
+  closeTemplates?: TemplateFactoryOptions[]
   /** 超时时间(ms) */
   timeout?: number
   /** 每次尝试间隔(ms) */
@@ -26,7 +24,7 @@ interface NavigatorConfig {
 }
 
 const defaultConfig: Required<NavigatorConfig> = {
-  mainSceneTemplate: { text: '庭院' },
+  mainSceneTemplate: { templatePath: '庭院' },
   closeTemplates: [
     { text: '关闭' },
     { text: '取消' },
