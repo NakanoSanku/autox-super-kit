@@ -2,6 +2,8 @@
  * 任务框架类型定义
  */
 
+import type { Task } from './Task'
+
 /**
  * 任务执行结果
  */
@@ -109,7 +111,7 @@ export interface TaskSnapshot {
  */
 export interface StackFrame {
   /** 任务实例 */
-  task: any
+  task: Task
   /** 运行选项 */
   options: RunnerOptions
   /** 上下文 */
@@ -125,7 +127,7 @@ export interface InterruptRequest {
   /** 任务名称 */
   name: string
   /** 要执行的任务 */
-  task: any
+  task: Task
   /** 任务选项 */
   options?: RunnerOptions
   /** 优先级 */
@@ -140,12 +142,26 @@ export type TaskEventType = 'start' | 'loop' | 'success' | 'pause' | 'resume' | 
 /**
  * 进入任务的原因
  */
-export type EnterReason = 'start' | 'resume'
+export enum EnterReason {
+  /** 首次启动 */
+  START = 'start',
+  /** 从中断恢复 */
+  RESUME = 'resume',
+}
 
 /**
  * 离开任务的原因
  */
-export type LeaveReason = 'complete' | 'suspend' | 'stop' | 'error'
+export enum LeaveReason {
+  /** 正常完成 */
+  COMPLETE = 'complete',
+  /** 被中断挂起 */
+  SUSPEND = 'suspend',
+  /** 外部停止 */
+  STOP = 'stop',
+  /** 发生错误 */
+  ERROR = 'error',
+}
 
 /**
  * 事件回调

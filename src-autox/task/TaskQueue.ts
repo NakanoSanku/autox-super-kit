@@ -91,7 +91,7 @@ class TaskQueue {
    * 获取队列中的任务
    */
   getTasks(): readonly QueuedTask[] {
-    return this.queue
+    return this.queue.slice()
   }
 
   /**

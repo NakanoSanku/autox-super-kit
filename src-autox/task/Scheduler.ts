@@ -28,6 +28,8 @@ interface TimedJob {
   options?: RunnerOptions
   /** 优先级 */
   priority: InterruptPriority
+  /** 上次运行时间戳（内部维护） */
+  lastRunAt?: number
 }
 
 /**
@@ -91,13 +93,12 @@ interface QueueHandle {
  */
 class Scheduler {
   private runner = new TaskRunner()
-  private timedJobs: Map<string, TimedJob & { lastRunDate?: string }> = new Map()
+  private timedJobs: Map<string, TimedJob> = new Map()
   private intervalJobs: Map<string, IntervalJob> = new Map()
   private eventJobs: Map<string, EventJob & { lastCheckAt?: number }> = new Map()
   private running = false
   private checkThread: any = null
   private currentHandle: TaskHandle | null = null
-  private skipRequested = false
   private queueResults: TaskResult[] = []
   private queueStartTime = 0
 
@@ -105,6 +106,9 @@ class Scheduler {
    * 注册定时任务
    */
   schedule(job: TimedJob): this {
+    if (!this.parseTime(job.time)) {
+      throw new Error(`Invalid time format for job "${job.name}": ${job.time}`)
+    }
     this.timedJobs.set(job.name, job)
     log.info(`注册定时任务: ${job.name} @ ${job.time}`)
     return this
@@ -161,7 +165,7 @@ class Scheduler {
       self.runQueue(queue)
     })
 
-    return this.createQueueHandle(queue)
+    return this.createQueueHandle()
   }
 
   /**
@@ -191,10 +195,6 @@ class Scheduler {
 
       this.queueResults.push(result)
       events.onTaskEnd?.(task, result, i)
-
-      if (this.skipRequested) {
-        this.skipRequested = false
-      }
 
       if (!this.running)
         break
@@ -239,13 +239,22 @@ class Scheduler {
   }
 
   private checkTimedJobs(): void {
-    const now = new Date()
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    const currentDate = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
+    const now = Date.now()
+    const today = new Date(now)
+    today.setHours(0, 0, 0, 0)
 
-    for (const [name, job] of this.timedJobs) {
-      if (job.time === currentTime && job.lastRunDate !== currentDate) {
-        job.lastRunDate = currentDate
+    for (const [name, job] of Array.from(this.timedJobs)) {
+      const parsed = this.parseTime(job.time)
+      if (!parsed) {
+        log.warn(`定时任务时间格式无效: ${name} @ ${job.time}`)
+        continue
+      }
+      const { hours, minutes } = parsed
+      const todayTriggerTime = today.getTime() + hours * 3600000 + minutes * 60000
+
+      // 在触发时间之后，且上次运行在今天触发时间之前（或从未运行）
+      if (now >= todayTriggerTime && (job.lastRunAt ?? 0) < todayTriggerTime) {
+        job.lastRunAt = now
         this.enqueueInterrupt(name, job)
       }
     }
@@ -254,7 +263,7 @@ class Scheduler {
   private checkIntervalJobs(): void {
     const now = Date.now()
 
-    for (const [name, job] of this.intervalJobs) {
+    for (const [name, job] of Array.from(this.intervalJobs)) {
       if (job.nextRunAt && now >= job.nextRunAt) {
         job.nextRunAt = now + job.interval
         this.enqueueInterrupt(name, job)
@@ -265,7 +274,7 @@ class Scheduler {
   private checkEventJobs(): void {
     const now = Date.now()
 
-    for (const [name, job] of this.eventJobs) {
+    for (const [name, job] of Array.from(this.eventJobs)) {
       const checkInterval = job.checkInterval ?? 30000
       if (now - (job.lastCheckAt ?? 0) >= checkInterval) {
         job.lastCheckAt = now
@@ -293,7 +302,7 @@ class Scheduler {
     this.runner.addInterrupt(request)
   }
 
-  private createQueueHandle(queue: TaskQueue): QueueHandle {
+  private createQueueHandle(): QueueHandle {
     const self = this
 
     return {
@@ -304,7 +313,7 @@ class Scheduler {
         self.currentHandle?.resume()
       },
       skip() {
-        self.skipRequested = true
+        // 停止当前任务，for 循环自然进入下一个任务
         self.currentHandle?.stop()
       },
       stop() {
@@ -324,6 +333,20 @@ class Scheduler {
         }
       },
     }
+  }
+
+  private parseTime(time: string): { hours: number; minutes: number } | null {
+    const parts = time.split(':')
+    if (parts.length !== 2)
+      return null
+
+    const hours = Number(parts[0])
+    const minutes = Number(parts[1])
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes))
+      return null
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59)
+      return null
+    return { hours, minutes }
   }
 }
 

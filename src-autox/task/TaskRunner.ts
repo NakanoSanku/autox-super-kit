@@ -15,7 +15,8 @@ import type {
   TaskResult,
 } from './types'
 import { createLogger } from '../core/logger'
-import { ExecuteResult, InterruptPriority, RunnerState } from './types'
+import { Navigator } from './Navigator'
+import { EnterReason, ExecuteResult, InterruptPriority, LeaveReason, RunnerState } from './types'
 
 const DEFAULT_INTERVAL = 800
 const CHECKPOINT_INTERVAL = 200
@@ -36,6 +37,8 @@ interface TaskHandle {
   readonly context: TaskContext
   /** 事件监听 */
   on: (event: TaskEventType, callback: TaskEventCallback) => void
+  /** 移除事件监听 */
+  off: (event: TaskEventType, callback: TaskEventCallback) => void
   /** 等待任务完成 */
   wait: () => TaskResult
 }
@@ -55,6 +58,7 @@ class TaskRunner {
   private pauseLock = threads.lock()
   private pauseCondition = this.pauseLock.newCondition()
   private result: TaskResult | null = null
+  private inInterrupt = false
   private log = createLogger('TaskRunner')
 
   /**
@@ -193,20 +197,24 @@ class TaskRunner {
   addInterrupt(request: InterruptRequest): void {
     this.interruptLock.lock()
     try {
-      if (request.priority === InterruptPriority.URGENT) {
-        this.interruptQueue.unshift(request)
-      }
-      else if (request.priority === InterruptPriority.HIGH) {
-        const urgentCount = this.interruptQueue.filter(r => r.priority === InterruptPriority.URGENT).length
-        this.interruptQueue.splice(urgentCount, 0, request)
+      const insertIndex = this.interruptQueue.findIndex(item => item.priority < request.priority)
+      if (insertIndex === -1) {
+        this.interruptQueue.push(request)
       }
       else {
-        this.interruptQueue.push(request)
+        this.interruptQueue.splice(insertIndex, 0, request)
       }
     }
     finally {
       this.interruptLock.unlock()
     }
+  }
+
+  /**
+   * 清除所有事件监听器
+   */
+  clearListeners(): void {
+    this.eventListeners.clear()
   }
 
   private runTask(): void {
@@ -232,10 +240,10 @@ class TaskRunner {
     this.emit('start')
 
     // 记录离开原因
-    let leaveReason: 'complete' | 'stop' | 'error' = 'complete'
+    let leaveReason: LeaveReason = LeaveReason.COMPLETE
 
     try {
-      task.onEnter?.('start')
+      task.onEnter?.(EnterReason.START)
     }
     catch (e) {
       this.log.error(`onEnter 异常: ${e}`)
@@ -246,7 +254,7 @@ class TaskRunner {
       while (this.ctx.count < times && !this.isStopped()) {
         this.checkPause()
         if (this.isStopped()) {
-          leaveReason = 'stop'
+          leaveReason = LeaveReason.STOP
           break
         }
 
@@ -273,11 +281,11 @@ class TaskRunner {
             break
           case ExecuteResult.STOP:
             this._state = RunnerState.STOPPED
-            leaveReason = 'stop'
+            leaveReason = LeaveReason.STOP
             break
           case ExecuteResult.ERROR:
             this._state = RunnerState.STOPPED
-            leaveReason = 'error'
+            leaveReason = LeaveReason.ERROR
             this.result = {
               successCount: this.ctx.count,
               totalLoops: this.ctx.loops,
@@ -294,6 +302,9 @@ class TaskRunner {
       }
     }
     finally {
+      if (this._state === RunnerState.STOPPED && leaveReason === LeaveReason.COMPLETE) {
+        leaveReason = LeaveReason.STOP
+      }
       try {
         task.onLeave?.(leaveReason)
       }
@@ -331,6 +342,10 @@ class TaskRunner {
   }
 
   private pollInterrupt(): void {
+    // 防止中断任务执行期间重入
+    if (this.inInterrupt)
+      return
+
     let request: InterruptRequest | undefined
 
     this.interruptLock.lock()
@@ -344,43 +359,58 @@ class TaskRunner {
     if (!request)
       return
 
-    // 调用 onLeave('suspend') 钩子（挂起当前任务）
+    this.inInterrupt = true
     try {
-      this.currentTask!.onLeave?.('suspend')
-    }
-    catch (e) {
-      this.log.error(`onLeave(suspend) 异常: ${e}`)
-    }
+      // 调用 onLeave('suspend') 钩子（挂起当前任务）
+      if (this.currentTask) {
+        try {
+          this.currentTask.onLeave?.(LeaveReason.SUSPEND)
+        }
+        catch (e) {
+          this.log.error(`onLeave(suspend) 异常: ${e}`)
+        }
+      }
 
-    // 保存主任务状态（只在第一次中断时保存）
-    this.taskStack.push({
-      task: this.currentTask!,
-      options: this.currentOptions,
-      context: { ...this.ctx },
-      state: this.currentTask!.getState(),
-    })
+      // 保存主任务状态（只保存一次，栈为空时才 push）
+      if (this.currentTask && this.taskStack.length === 0) {
+        this.taskStack.push({
+          task: this.currentTask,
+          options: this.currentOptions,
+          context: { ...this.ctx },
+          state: this.deepCloneState(this.currentTask.getState()),
+        })
+      }
 
-    // 处理所有中断任务，直到队列为空
-    while (request) {
-      this.log.info(`处理中断: ${request.name}`)
-      this.runInterruptTask(request)
+      // 处理所有中断任务，直到队列为空
+      while (request) {
+        this.log.info(`处理中断: ${request.name}`)
+        this.runInterruptTask(request)
 
-      // 检查是否还有中断任务
-      this.interruptLock.lock()
+        // 检查是否还有中断任务
+        this.interruptLock.lock()
+        try {
+          request = this.interruptQueue.shift()
+        }
+        finally {
+          this.interruptLock.unlock()
+        }
+      }
+
+      // 所有中断任务完成后，恢复主任务
       try {
-        request = this.interruptQueue.shift()
+        this.restoreFromStack()
       }
-      finally {
-        this.interruptLock.unlock()
+      catch (e) {
+        this.log.error(`恢复主任务异常: ${e}`)
       }
     }
-
-    // 所有中断任务完成后，恢复主任务
-    this.restoreFromStack()
+    finally {
+      this.inInterrupt = false
+    }
   }
 
   private runInterruptTask(request: InterruptRequest): void {
-    const task = request.task as Task
+    const task = request.task
     const options = request.options ?? {}
     const times = options.times ?? 1
     const interval = options.interval ?? DEFAULT_INTERVAL
@@ -400,20 +430,20 @@ class TaskRunner {
     })
 
     try {
-      task.onEnter?.('start')
+      task.onEnter?.(EnterReason.START)
     }
     catch (e) {
       this.log.error(`中断任务 onEnter 异常: ${e}`)
       return
     }
 
-    let leaveReason: 'complete' | 'stop' | 'error' = 'complete'
+    let leaveReason: LeaveReason = LeaveReason.COMPLETE
 
     try {
       while (interruptCtx.count < times && !this.isStopped()) {
         this.checkPause()
         if (this.isStopped()) {
-          leaveReason = 'stop'
+          leaveReason = LeaveReason.STOP
           break
         }
 
@@ -423,7 +453,7 @@ class TaskRunner {
         }
         catch (e) {
           this.log.error(`中断任务 execute 异常: ${e}`)
-          leaveReason = 'error'
+          leaveReason = LeaveReason.ERROR
           break
         }
 
@@ -434,10 +464,10 @@ class TaskRunner {
             interruptCtx.count++
             break
           case ExecuteResult.STOP:
-            leaveReason = 'stop'
+            leaveReason = LeaveReason.STOP
             break
           case ExecuteResult.ERROR:
-            leaveReason = 'error'
+            leaveReason = LeaveReason.ERROR
             break
         }
 
@@ -479,7 +509,7 @@ class TaskRunner {
 
     // 调用 onEnter('resume') 钩子（恢复任务）
     try {
-      frame.task.onEnter?.('resume')
+      frame.task.onEnter?.(EnterReason.RESUME)
     }
     catch (e) {
       this.log.error(`onEnter(resume) 异常: ${e}`)
@@ -489,17 +519,14 @@ class TaskRunner {
   }
 
   private ensureScene(task: Task): void {
-    if (task.isInScene?.())
-      return
-
-    this.log.info('尝试恢复任务场景')
-
-    for (let i = 0; i < 5; i++) {
-      back()
-      this.sleep(500)
+    try {
+      if (!Navigator.ensureScene(task)) {
+        this.log.warn('任务场景恢复失败')
+      }
     }
-
-    task.entryScene?.()
+    catch (e) {
+      this.log.error(`恢复任务场景异常: ${e}`)
+    }
   }
 
   private emit(event: TaskEventType, data?: any): void {
@@ -536,11 +563,26 @@ class TaskRunner {
         }
         listeners.push(callback)
       },
+      off(event: TaskEventType, callback: TaskEventCallback) {
+        const listeners = self.eventListeners.get(event)
+        if (listeners) {
+          const index = listeners.indexOf(callback)
+          if (index !== -1) {
+            listeners.splice(index, 1)
+          }
+        }
+      },
       wait(): TaskResult {
         while (self._state === RunnerState.RUNNING || self._state === RunnerState.PAUSED) {
           sleep(100)
         }
-        return self.result!
+        return self.result ?? {
+          successCount: 0,
+          totalLoops: 0,
+          duration: 0,
+          reason: 'error',
+          error: new Error('Task result unavailable'),
+        }
       },
     }
   }
@@ -560,10 +602,24 @@ class TaskRunner {
     this.currentTask = null
     this.currentOptions = {}
     this.ctx = this.createEmptyContext()
-    this.eventListeners.clear()
+    // 不清除 eventListeners，避免 start 后注册的监听器丢失事件
     this.taskStack = []
     this.interruptQueue = []
     this.result = null
+    this.inInterrupt = false
+  }
+
+  /**
+   * 深拷贝状态，避免引用类型导致状态污染
+   */
+  private deepCloneState(state: Record<string, any>): Record<string, any> {
+    try {
+      return JSON.parse(JSON.stringify(state))
+    }
+    catch {
+      // 如果序列化失败，返回浅拷贝
+      return { ...state }
+    }
   }
 
   private isStopped(): boolean {
