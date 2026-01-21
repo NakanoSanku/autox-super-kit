@@ -31,7 +31,7 @@ interface IMatchResult {
      * @param func - 接收匹配结果并返回布尔值的回调函数
      * @returns 回调函数的返回值
      */
-    do(func: (matchResult: MatchResult) => boolean): boolean;
+    do(func: (matchResult: MatchResult) => void): boolean;
 }
 
 /**
@@ -82,8 +82,9 @@ class MatchResult implements IMatchResult {
      * @param func - 接收当前匹配结果并返回布尔值的回调函数
      * @returns 回调函数的返回值
      */
-    do(func: (matchResult: MatchResult) => boolean): boolean {
-        return func(this);
+    do(func: (matchResult: MatchResult) => void): boolean {
+        func(this);
+        return true;
     }
 
     /**
@@ -122,7 +123,7 @@ class NullMatchResult implements IMatchResult {
      * @param _func - 回调函数（不会被执行）
      * @returns 始终返回 false
      */
-    do(_func: (matchResult: MatchResult) => boolean): boolean {
+    do(_func: (matchResult: MatchResult) => void): boolean {
         return false;
     }
 
@@ -469,7 +470,44 @@ class OcrTemplate extends Template {
     }
 }
 
+/**
+ * 模板工厂选项类型
+ * @description 联合类型，支持创建不同类型的模板
+ */
+type TemplateFactoryOptions = ImageTemplateOptions | MultiColorTemplateOptions | OcrTemplateOptions
+
+/**
+ * 模板工厂函数（语法糖）
+ * @description 根据传入的选项自动创建对应类型的 Template
+ * @param options - 模板配置选项
+ * @returns 对应类型的 Template 实例
+ * @example
+ * ```typescript
+ * // 创建图片模板
+ * const imgTpl = $({ templatePath: 'temp.png' })
+ *
+ * // 创建多点找色模板
+ * const colorTpl = $({ firstColor: '#ffffff', colors: [[10, 20, '#000000']] })
+ *
+ * // 创建 OCR 模板
+ * const ocrTpl = $({ text: '登录' })
+ * ```
+ */
+function $(options: TemplateFactoryOptions): Template {
+    if ('templatePath' in options) {
+        return new ImageTemplate(options as ImageTemplateOptions)
+    }
+    if ('firstColor' in options && 'colors' in options) {
+        return new MultiColorTemplate(options as MultiColorTemplateOptions)
+    }
+    if ('text' in options) {
+        return new OcrTemplate(options as OcrTemplateOptions)
+    }
+    throw new Error('Invalid template options: unable to determine template type')
+}
+
 export {
+    $,
     Template,
     ImageTemplate,
     MultiColorTemplate,
@@ -483,5 +521,6 @@ export type {
     TemplateOptions,
     ImageTemplateOptions,
     MultiColorTemplateOptions,
-    OcrTemplateOptions
+    OcrTemplateOptions,
+    TemplateFactoryOptions
 };
