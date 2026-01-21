@@ -195,6 +195,7 @@ function plugin_copy_file() {
   return copy({
     targets: [
       { src: 'src-autox/project.json', dest: 'out' },
+      { src: 'src-autox/assets/**/*', dest: 'out/assets' },
     ],
   })
 }
