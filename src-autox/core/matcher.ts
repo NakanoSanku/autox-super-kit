@@ -211,6 +211,15 @@ abstract class Template {
             }
         }
     }
+
+    /**
+     * 检查是否存在匹配结果
+     * @param region - 可选的搜索区域 [x, y, width, height]
+     * @returns 如果存在匹配则返回 true，否则返回 false
+     */
+    exists(region?: [number, number, number, number]): boolean {
+        return !this.match(region).isNull()
+    }
 }
 
 /**
