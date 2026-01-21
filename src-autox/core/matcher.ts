@@ -1,5 +1,6 @@
 import { humanClick } from "./action";
 import { captureScreenEx } from "./capture";
+import { defaultMatcherConfig, defaultOcrConfig } from "./config";
 import { loadTemplate } from "./image";
 
 /**
@@ -173,7 +174,7 @@ abstract class Template {
      * @param options - 模板配置选项
      */
     constructor(options?: TemplateOptions) {
-        this.threshold = options?.threshold ?? 0.9;
+        this.threshold = options?.threshold ?? defaultMatcherConfig.threshold;
         this.region = options?.region ?? null;
     }
 
@@ -195,7 +196,7 @@ abstract class Template {
      * @param region - 可选的匹配区域，格式为 [x, y, width, height]，优先级高于构造时设置的区域
      * @returns 匹配成功返回匹配结果，超时返回空结果
      */
-    wait(timeout = 5000, interval = 500, region?: [number, number, number, number]): IMatchResult {
+    wait(timeout = defaultMatcherConfig.waitTimeout, interval = defaultMatcherConfig.waitInterval, region?: [number, number, number, number]): IMatchResult {
         const startTime = Date.now();
         while (true) {
             if ((Date.now() - startTime) >= timeout) {
@@ -411,9 +412,9 @@ class OcrTemplate extends Template {
     constructor(options: OcrTemplateOptions) {
         super(options);
         this.text = options.text;
-        this.modelPath = options.modelPath ?? null;
-        this.cpuThreadNum = options.cpuThreadNum ?? 4;
-        this.useSlim = options.useSlim ?? true;
+        this.modelPath = options.modelPath ?? defaultOcrConfig.modelPath;
+        this.cpuThreadNum = options.cpuThreadNum ?? defaultOcrConfig.cpuThreadNum;
+        this.useSlim = options.useSlim ?? defaultOcrConfig.useSlim;
     }
 
     /**

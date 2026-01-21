@@ -47,3 +47,35 @@ export const defaultActionConfig: ActionConfig = {
   swipeSteps: 10,
   swipeDelay: 0,
 }
+
+/** 模板匹配基础配置 */
+export interface MatcherConfig {
+  /** 默认匹配阈值 (0-1) */
+  threshold: number
+  /** 默认等待超时时间 (ms) */
+  waitTimeout: number
+  /** 默认等待间隔时间 (ms) */
+  waitInterval: number
+}
+
+export const defaultMatcherConfig: MatcherConfig = {
+  threshold: 0.9,
+  waitTimeout: 5000,
+  waitInterval: 500,
+}
+
+/** OCR 模块配置 */
+export interface OcrConfig {
+  /** 自定义模型路径，设置后 cpuThreadNum 和 useSlim 将被忽略 */
+  modelPath: string | null
+  /** 默认 CPU 核心数量 */
+  cpuThreadNum: number
+  /** 是否使用快速模型 */
+  useSlim: boolean
+}
+
+export const defaultOcrConfig: OcrConfig = {
+  modelPath: null,
+  cpuThreadNum: 4,
+  useSlim: true,
+}
