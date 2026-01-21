@@ -98,33 +98,8 @@ function ensureScene(task: Task): boolean {
   return task.isInScene?.() ?? true
 }
 
-/**
- * 返回主界面
- */
-function goHome(timeout?: number): boolean {
-  const endTime = Date.now() + (timeout ?? config.timeout)
-
-  while (Date.now() < endTime) {
-    if ($(config.mainSceneTemplate).exists()) {
-      return true
-    }
-
-    for (const template of config.closeTemplates) {
-      if ($(template).match().click()) {
-        sleep(config.interval)
-        break
-      }
-    }
-
-    sleep(config.interval)
-  }
-
-  return $(config.mainSceneTemplate).exists()
-}
-
 export const Navigator = {
   configure,
   ensureStableUI,
-  ensureScene,
-  goHome,
+  ensureScene
 }
