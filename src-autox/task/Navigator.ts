@@ -11,22 +11,30 @@ const log = createLogger('Navigator')
 /**
  * 导航器配置
  */
+/** 匹配模板类型 */
+type MatchTemplate = Parameters<typeof $>[0]
+
 interface NavigatorConfig {
   /** 主界面标志模板 */
-  mainSceneTemplate?: Parameters<typeof $>[0]
-  /** 关闭按钮文本列表 */
-  closeTexts?: string[]
-  /** 最大尝试次数 */
-  maxAttempts?: number
+  mainSceneTemplate?: MatchTemplate
+  /** 关闭按钮模板列表（支持文本、图片等任意匹配模板） */
+  closeTemplates?: MatchTemplate[]
+  /** 超时时间(ms) */
+  timeout?: number
   /** 每次尝试间隔(ms) */
-  attemptInterval?: number
+  interval?: number
 }
 
 const defaultConfig: Required<NavigatorConfig> = {
   mainSceneTemplate: { text: '庭院' },
-  closeTexts: ['关闭', '取消', '确定', '知道了'],
-  maxAttempts: 5,
-  attemptInterval: 500,
+  closeTemplates: [
+    { text: '关闭' },
+    { text: '取消' },
+    { text: '确定' },
+    { text: '知道了' },
+  ],
+  timeout: 5000,
+  interval: 500,
 }
 
 let config: Required<NavigatorConfig> = { ...defaultConfig }
@@ -41,27 +49,25 @@ function configure(options: NavigatorConfig): void {
 /**
  * 确保 UI 稳定（关闭弹窗、回到主界面）
  */
-function ensureStableUI(maxAttempts?: number): boolean {
-  const attempts = maxAttempts ?? config.maxAttempts
+function ensureStableUI(timeout?: number): boolean {
+  const endTime = Date.now() + (timeout ?? config.timeout)
 
-  for (let i = 0; i < attempts; i++) {
+  while (Date.now() < endTime) {
+    if ($(config.mainSceneTemplate).exists()) {
+      return true
+    }
+
     let closed = false
-
-    for (const text of config.closeTexts) {
-      if ($({ text }).match().click()) {
+    for (const template of config.closeTemplates) {
+      if ($(template).match().click()) {
         closed = true
-        sleep(config.attemptInterval)
+        sleep(config.interval)
         break
       }
     }
 
     if (!closed) {
-      if ($(config.mainSceneTemplate).exists()) {
-        return true
-      }
-
-      back()
-      sleep(config.attemptInterval)
+      sleep(config.interval)
     }
   }
 
@@ -97,23 +103,22 @@ function ensureScene(task: Task): boolean {
 /**
  * 返回主界面
  */
-function goHome(maxAttempts?: number): boolean {
-  const attempts = maxAttempts ?? config.maxAttempts
+function goHome(timeout?: number): boolean {
+  const endTime = Date.now() + (timeout ?? config.timeout)
 
-  for (let i = 0; i < attempts; i++) {
+  while (Date.now() < endTime) {
     if ($(config.mainSceneTemplate).exists()) {
       return true
     }
 
-    for (const text of config.closeTexts) {
-      if ($({ text }).match().click()) {
-        sleep(config.attemptInterval)
+    for (const template of config.closeTemplates) {
+      if ($(template).match().click()) {
+        sleep(config.interval)
         break
       }
     }
 
-    back()
-    sleep(config.attemptInterval)
+    sleep(config.interval)
   }
 
   return $(config.mainSceneTemplate).exists()
