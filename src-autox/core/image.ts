@@ -1,4 +1,3 @@
-import { captureScreenEx } from './capture';
 import { defaultImageCacheConfig } from './config';
 
 const cacheLock = threads.lock();
@@ -91,45 +90,6 @@ export function stopAutoCleanup(): void {
     }
 }
 
-/**
- * 强化版findImage
- * @param template - 模板图片路径
- * @param options - 查找选项
- * @param src - 源图片，不传则自动截图
- */
-export function findImageEx(
-    template: string,
-    options?: FindImageOptions,
-    src?: Image,
-): Rect | null {
-    const templateImg = loadTemplate(template);
-    let srcImg = src;
-    let needRecycleSrc = false;
-    if (!srcImg) {
-        srcImg = captureScreenEx();
-        needRecycleSrc = true;
-    }
-    if (!srcImg) {
-        return null;
-    }
-
-    try {
-        const result = images.findImage(srcImg, templateImg, options);
-        if (result) {
-            return {
-                x: result.x,
-                y: result.y,
-                width: templateImg.width,
-                height: templateImg.height
-            };
-        }
-        return null;
-    } finally {
-        if (needRecycleSrc && srcImg) {
-            srcImg.recycle();
-        }
-    }
-}
 /**
  * 移除指定模板缓存
  */
