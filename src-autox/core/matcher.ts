@@ -28,8 +28,8 @@ interface IMatchResult {
 
     /**
      * 对匹配结果执行自定义操作
-     * @param func - 接收匹配结果并返回布尔值的回调函数
-     * @returns 回调函数的返回值
+     * @param func - 接收匹配结果的回调函数
+     * @returns 匹配成功时返回 true，匹配失败时返回 false
      */
     do(func: (matchResult: MatchResult) => void): boolean;
 }
@@ -493,15 +493,18 @@ type TemplateFactoryOptions = ImageTemplateOptions | MultiColorTemplateOptions |
  * const ocrTpl = $({ text: '登录' })
  * ```
  */
+function $(options: ImageTemplateOptions): ImageTemplate
+function $(options: MultiColorTemplateOptions): MultiColorTemplate
+function $(options: OcrTemplateOptions): OcrTemplate
 function $(options: TemplateFactoryOptions): Template {
     if ('templatePath' in options) {
-        return new ImageTemplate(options as ImageTemplateOptions)
+        return new ImageTemplate(options)
     }
     if ('firstColor' in options && 'colors' in options) {
-        return new MultiColorTemplate(options as MultiColorTemplateOptions)
+        return new MultiColorTemplate(options)
     }
     if ('text' in options) {
-        return new OcrTemplate(options as OcrTemplateOptions)
+        return new OcrTemplate(options)
     }
     throw new Error('Invalid template options: unable to determine template type')
 }
