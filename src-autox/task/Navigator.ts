@@ -24,14 +24,22 @@ interface NavigatorConfig {
 }
 
 const defaultConfig: Required<NavigatorConfig> = {
-  mainSceneTemplate: { templatePath: '庭院' },
+  mainSceneTemplate: { templatePath: './assets/庭院_封.png' },
   closeTemplates: [
-    { text: '关闭' },
-    { text: '取消' },
-    { text: '确定' },
-    { text: '知道了' },
+    { templatePath: './assets/探索_退出_确认.png' },
+    { templatePath: './assets/探索_章节_关闭.png' },
+    { templatePath: './assets/结界突破_关闭.png' },
+    { templatePath: './assets/结界卡_关闭.png' },
+    { templatePath: './assets/日常_关闭.png' },
+    { templatePath: './assets/六道之门_返回.png' },
+    { templatePath: './assets/寄养_返回.png' },
+    { templatePath: './assets/式神录_升级_返回.png' },
+    { templatePath: './assets/式神录_御魂方案_返回.png' },
+    { templatePath: './assets/探索_返回.png' },
+    { templatePath: './assets/式神录_返回.png' }, 
+    { templatePath: './assets/町中_庭院.png' },
   ],
-  timeout: 5000,
+  timeout: 5 * 60 * 1000,
   interval: 500,
 }
 
@@ -48,16 +56,30 @@ function configure(options: NavigatorConfig): void {
  * 确保 UI 稳定（关闭弹窗、回到主界面）
  */
 function ensureStableUI(timeout?: number): boolean {
-  const endTime = Date.now() + (timeout ?? config.timeout)
+  const actualTimeout = timeout ?? config.timeout
+  const endTime = Date.now() + actualTimeout
+  log.info(`ensureStableUI 开始, timeout=${actualTimeout}ms`)
 
+  let iteration = 0
   while (Date.now() < endTime) {
+    iteration++
+    const remaining = endTime - Date.now()
+    log.debug(`迭代 #${iteration}, 剩余时间=${remaining}ms`)
+
+    log.debug(`检查主界面模板: ${JSON.stringify(config.mainSceneTemplate)}`)
     if ($(config.mainSceneTemplate).exists()) {
+      log.info(`主界面已找到, 迭代 #${iteration}`)
       return true
     }
+    log.debug('主界面未找到, 尝试关闭弹窗')
 
     let closed = false
-    for (const template of config.closeTemplates) {
-      if ($(template).match().click()) {
+    for (let i = 0; i < config.closeTemplates.length; i++) {
+      const template = config.closeTemplates[i]
+      log.debug(`尝试关闭模板 [${i}]: ${JSON.stringify(template)}`)
+      const matchResult = $(template).match()
+      if (matchResult.click()) {
+        log.info(`成功点击关闭模板 [${i}]: ${JSON.stringify(template)}`)
         closed = true
         sleep(config.interval)
         break
@@ -65,11 +87,15 @@ function ensureStableUI(timeout?: number): boolean {
     }
 
     if (!closed) {
+      log.debug(`本次迭代未找到可关闭弹窗, 等待 ${config.interval}ms`)
       sleep(config.interval)
     }
   }
 
-  return $(config.mainSceneTemplate).exists()
+  log.warn('ensureStableUI 超时, 最终检查主界面')
+  const finalResult = $(config.mainSceneTemplate).exists()
+  log.info(`最终结果: ${finalResult}`)
+  return finalResult
 }
 
 /**
