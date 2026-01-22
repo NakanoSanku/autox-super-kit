@@ -52,6 +52,7 @@ interface IntervalJob {
 
 /**
  * 事件任务
+ * 触发后在独立线程中并行执行，不会中断主任务
  */
 interface EventJob {
   /** 任务名称 */
@@ -64,8 +65,6 @@ interface EventJob {
   task: Task
   /** 任务选项 */
   options?: RunnerOptions
-  /** 优先级 */
-  priority: InterruptPriority
 }
 
 type Job = TimedJob | IntervalJob | EventJob
@@ -95,12 +94,13 @@ class Scheduler {
   private runner = new TaskRunner()
   private timedJobs: Map<string, TimedJob> = new Map()
   private intervalJobs: Map<string, IntervalJob> = new Map()
-  private eventJobs: Map<string, EventJob & { lastCheckAt?: number }> = new Map()
+  private eventJobs: Map<string, EventJob & { lastCheckAt?: number; isRunning?: boolean }> = new Map()
   private running = false
   private checkThread: any = null
   private currentHandle: TaskHandle | null = null
   private queueResults: TaskResult[] = []
   private queueStartTime = 0
+  private eventThreads: Map<string, any> = new Map()
 
   /**
    * 注册定时任务
@@ -178,6 +178,18 @@ class Scheduler {
       this.checkThread.interrupt()
       this.checkThread = null
     }
+    // 停止所有事件任务线程
+    for (const [name, { runner, thread }] of this.eventThreads) {
+      try {
+        runner.stop()
+        thread.interrupt()
+        log.info(`停止事件任务线程: ${name}`)
+      }
+      catch (e) {
+        log.error(`停止事件任务线程异常 [${name}]: ${e}`)
+      }
+    }
+    this.eventThreads.clear()
   }
 
   private runQueue(queue: TaskQueue): void {
@@ -275,12 +287,16 @@ class Scheduler {
     const now = Date.now()
 
     for (const [name, job] of Array.from(this.eventJobs)) {
+      // 如果事件任务正在运行，跳过
+      if (job.isRunning)
+        continue
+
       const checkInterval = job.checkInterval ?? 30000
       if (now - (job.lastCheckAt ?? 0) >= checkInterval) {
         job.lastCheckAt = now
         try {
           if (job.condition()) {
-            this.enqueueInterrupt(name, job)
+            this.runEventJob(name, job)
           }
         }
         catch (e) {
@@ -290,7 +306,34 @@ class Scheduler {
     }
   }
 
-  private enqueueInterrupt(name: string, job: Job): void {
+  /**
+   * 在独立线程中执行事件任务
+   */
+  private runEventJob(name: string, job: EventJob & { lastCheckAt?: number; isRunning?: boolean }): void {
+    job.isRunning = true
+    log.info(`启动事件任务线程: ${name}`)
+
+    const self = this
+    const eventRunner = new TaskRunner()
+    const thread = threads.start(() => {
+      try {
+        const handle = eventRunner.start(job.task, job.options)
+        handle.wait()
+        log.info(`事件任务完成: ${name}`)
+      }
+      catch (e) {
+        log.error(`事件任务执行异常 [${name}]: ${e}`)
+      }
+      finally {
+        job.isRunning = false
+        self.eventThreads.delete(name)
+      }
+    })
+
+    this.eventThreads.set(name, { thread, runner: eventRunner })
+  }
+
+  private enqueueInterrupt(name: string, job: TimedJob | IntervalJob): void {
     const request: InterruptRequest = {
       name,
       task: job.task,

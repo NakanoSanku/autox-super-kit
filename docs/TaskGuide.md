@@ -380,13 +380,12 @@ scheduler.every({
   priority: InterruptPriority.NORMAL,
 })
 
-// 突发事件：御魂爆满
+// 突发事件：御魂爆满（在独立线程中并行执行）
 scheduler.on({
   name: '御魂爆满',
   condition: () => $({ templatePath: 'assets/yuhun_full.png' }).exists(),
   checkInterval: 60 * 1000,
   task: new QingLiYuHunTask(),
-  priority: InterruptPriority.URGENT,
 })
 
 // 主任务队列
@@ -404,7 +403,20 @@ const handle = scheduler.start(mainQueue)
 | `InterruptPriority.LOW` | 低优先级，队列末尾 |
 | `InterruptPriority.NORMAL` | 普通优先级 |
 | `InterruptPriority.HIGH` | 高优先级，队列前部 |
-| `InterruptPriority.URGENT` | 紧急，下一个 checkpoint 立即执行 |
+
+### 事件任务（并行执行）
+
+事件任务触发后会在**独立线程**中并行执行，不会中断主任务。适用于处理弹窗、网络卡顿等与主任务逻辑可共存的场景：
+
+```typescript
+// 事件任务：御魂爆满（在独立线程中执行，不影响主任务）
+scheduler.on({
+  name: '御魂爆满',
+  condition: () => $({ templatePath: 'assets/yuhun_full.png' }).exists(),
+  checkInterval: 60 * 1000,
+  task: new QingLiYuHunTask(),
+})
+```
 
 ### 场景导航
 

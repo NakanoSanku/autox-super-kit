@@ -44,8 +44,6 @@ export enum InterruptPriority {
   NORMAL = 1,
   /** 高优先级，队列前部 */
   HIGH = 2,
-  /** 紧急，立即执行（下一个 checkpoint） */
-  URGENT = 3,
 }
 
 /**

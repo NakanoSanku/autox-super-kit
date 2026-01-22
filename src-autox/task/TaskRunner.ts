@@ -16,7 +16,7 @@ import type {
 } from './types'
 import { createLogger } from '../core/logger'
 import { Navigator } from './Navigator'
-import { EnterReason, ExecuteResult, InterruptPriority, LeaveReason, RunnerState } from './types'
+import { EnterReason, ExecuteResult, LeaveReason, RunnerState } from './types'
 
 const DEFAULT_INTERVAL = 800
 const CHECKPOINT_INTERVAL = 200
@@ -59,7 +59,6 @@ class TaskRunner {
   private pauseCondition = this.pauseLock.newCondition()
   private result: TaskResult | null = null
   private inInterrupt = false
-  private inUrgent = false
   private log = createLogger('TaskRunner')
 
   /**
@@ -344,40 +343,6 @@ class TaskRunner {
 
   private pollInterrupt(): void {
     // 防止中断任务执行期间重入
-    if (this.inUrgent)
-      return
-
-    const shiftUrgent = (): InterruptRequest | undefined => {
-      let urgentRequest: InterruptRequest | undefined
-      this.interruptLock.lock()
-      try {
-        const index = this.interruptQueue.findIndex(item => item.priority === InterruptPriority.URGENT)
-        if (index !== -1) {
-          urgentRequest = this.interruptQueue.splice(index, 1)[0]
-        }
-      }
-      finally {
-        this.interruptLock.unlock()
-      }
-      return urgentRequest
-    }
-
-    let urgentRequest = shiftUrgent()
-    if (urgentRequest) {
-      this.inUrgent = true
-      try {
-        while (urgentRequest) {
-          this.log.info(`处理中断: ${urgentRequest.name}`)
-          this.runInterruptTask(urgentRequest)
-          urgentRequest = shiftUrgent()
-        }
-      }
-      finally {
-        this.inUrgent = false
-      }
-      return
-    }
-
     if (this.inInterrupt)
       return
 
@@ -642,7 +607,6 @@ class TaskRunner {
     this.interruptQueue = []
     this.result = null
     this.inInterrupt = false
-    this.inUrgent = false
   }
 
   /**
