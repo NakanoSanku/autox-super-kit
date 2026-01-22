@@ -29,11 +29,12 @@ abstract class Task {
 
   /**
    * Runner 引用，由 Runner 注入
-   * 用于调用可中断的 sleep/waitUntil
+   * 用于调用可中断的 sleep/waitUntil/clickUntilGone
    */
   protected runner!: {
     sleep: (ms: number) => void
     waitUntil: (condition: () => boolean, timeout?: number, interval?: number) => boolean
+    clickUntilGone: (clickFn: () => boolean, interval?: number) => boolean
   }
 
   /**

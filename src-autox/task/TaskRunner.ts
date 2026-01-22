@@ -145,6 +145,27 @@ class TaskRunner {
   }
 
   /**
+   * 持续点击直到目标消失（可中断）
+   * @param clickFn 点击函数，返回 true 表示点击成功（目标存在），返回 false 表示目标已消失
+   * @param interval 点击间隔(ms)，默认 1000
+   * @returns 目标消失返回 true，被停止返回 false
+   */
+  clickUntilGone(clickFn: () => boolean, interval = 1000): boolean {
+    if (!clickFn()) {
+      return false
+    }
+    while (!this.isStopped()) {
+      this.checkPause()
+      this.pollInterrupt()
+      if (!clickFn()) {
+        return true
+      }
+      this.sleep(interval)
+    }
+    return false
+  }
+
+  /**
    * 暂停任务
    */
   pause(): void {
@@ -235,6 +256,7 @@ class TaskRunner {
     task._injectRunner({
       sleep: ms => this.sleep(ms),
       waitUntil: (condition, timeout, interval) => this.waitUntil(condition, timeout, interval),
+      clickUntilGone: (clickFn, interval) => this.clickUntilGone(clickFn, interval),
     })
 
     this.emit('start')
@@ -427,6 +449,7 @@ class TaskRunner {
     task._injectRunner({
       sleep: ms => this.sleep(ms),
       waitUntil: (condition, timeout, interval) => this.waitUntil(condition, timeout, interval),
+      clickUntilGone: (clickFn, interval) => this.clickUntilGone(clickFn, interval),
     })
 
     try {
@@ -503,6 +526,7 @@ class TaskRunner {
     frame.task._injectRunner({
       sleep: ms => this.sleep(ms),
       waitUntil: (condition, timeout, interval) => this.waitUntil(condition, timeout, interval),
+      clickUntilGone: (clickFn, interval) => this.clickUntilGone(clickFn, interval),
     })
 
     this.ensureScene(frame.task)
