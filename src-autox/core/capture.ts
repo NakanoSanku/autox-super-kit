@@ -8,7 +8,10 @@ const captureLock = threads.lock();
 export function captureScreenEx(): Image {
     captureLock.lock();
     try {
-        return captureScreen();
+        if (requestScreenCaptureEx()) {
+            return captureScreen();
+        }
+        throw new Error("请求截图失败");
     } finally {
         captureLock.unlock();
     }
