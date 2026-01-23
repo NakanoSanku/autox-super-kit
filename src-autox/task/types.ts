@@ -2,6 +2,7 @@
  * 任务框架类型定义
  */
 
+import type { TemplateFactoryOptions } from '../core/matcher'
 import type { Task } from './Task'
 
 /**
@@ -165,3 +166,17 @@ export enum LeaveReason {
  * 事件回调
  */
 export type TaskEventCallback = (data?: any) => void
+
+/**
+ * 场景配置（声明式导航）
+ */
+export interface SceneConfig {
+  /** 目标场景模板，用于判断是否已在场景内 */
+  targetTemplate: TemplateFactoryOptions
+  /** 导航步骤模板列表，循环尝试点击直到目标场景出现 */
+  navigationSteps?: TemplateFactoryOptions[]
+  /** 导航超时时间(ms)，默认 30000 */
+  timeout?: number
+  /** 点击间隔(ms)，默认 500 */
+  interval?: number
+}

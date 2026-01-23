@@ -2,7 +2,7 @@
  * 任务基类
  */
 
-import type { EnterReason, LeaveReason, RunnerOptions, TaskContext } from './types'
+import type { EnterReason, LeaveReason, RunnerOptions, SceneConfig, TaskContext } from './types'
 import { createLogger } from '../core/logger'
 import { ExecuteResult } from './types'
 
@@ -16,6 +16,12 @@ abstract class Task {
    * 用于中断恢复，只保存这些字段
    */
   static stateKeys: string[] = []
+
+  /**
+   * 场景配置（声明式导航）
+   * 定义目标场景和导航步骤，Runner 会自动处理场景进入
+   */
+  static sceneConfig?: SceneConfig
 
   /**
    * 任务上下文，由 Runner 注入
@@ -54,18 +60,6 @@ abstract class Task {
    * @param reason - 离开原因：'complete' 正常完成 | 'suspend' 被中断挂起 | 'stop' 外部停止 | 'error' 发生错误
    */
   onLeave?(reason: LeaveReason): void
-
-  /**
-   * 检测是否在任务场景内（可选）
-   * 用于中断恢复后判断是否需要重新导航
-   */
-  isInScene?(): boolean
-
-  /**
-   * 导航到任务入口场景（可选）
-   * 用于中断恢复后重新进入任务场景
-   */
-  entryScene?(): void
 
   /**
    * 获取任务状态（只包含 stateKeys 声明的字段）

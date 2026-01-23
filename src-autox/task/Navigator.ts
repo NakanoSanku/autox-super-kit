@@ -3,29 +3,26 @@
  */
 
 import type { TemplateFactoryOptions } from '../core/matcher'
-import type { Task } from './Task'
+import type { SceneConfig } from './types'
+import { Task } from './Task'
 import { createLogger } from '../core/logger'
 import { $ } from '../core/matcher'
 
 const log = createLogger('Navigator')
 
 /**
- * 导航器配置
+ * 默认配置常量
  */
-interface NavigatorConfig {
-  /** 主界面标志模板 */
-  mainSceneTemplate?: TemplateFactoryOptions
-  /** 关闭按钮模板列表（支持文本、图片、多点找色等任意匹配模板） */
-  closeTemplates?: TemplateFactoryOptions[]
-  /** 超时时间(ms) */
-  timeout?: number
-  /** 每次尝试间隔(ms) */
-  interval?: number
-}
+const DEFAULT_TIMEOUT = 5 * 60 * 1000
+const DEFAULT_INTERVAL = 500
+const DEFAULT_SCENE_TIMEOUT = 30000
 
-const defaultConfig: Required<NavigatorConfig> = {
-  mainSceneTemplate: { templatePath: './assets/庭院_封.png' },
-  closeTemplates: [
+/**
+ * 主界面场景默认配置
+ */
+const defaultMainSceneConfig: SceneConfig = {
+  targetTemplate: { templatePath: './assets/庭院_封.png' },
+  navigationSteps: [
     { templatePath: './assets/探索_退出_确认.png' },
     { templatePath: './assets/探索_章节_关闭.png' },
     { templatePath: './assets/结界突破_关闭.png' },
@@ -36,29 +33,34 @@ const defaultConfig: Required<NavigatorConfig> = {
     { templatePath: './assets/式神录_升级_返回.png' },
     { templatePath: './assets/式神录_御魂方案_返回.png' },
     { templatePath: './assets/探索_返回.png' },
-    { templatePath: './assets/式神录_返回.png' }, 
+    { templatePath: './assets/式神录_返回.png' },
     { templatePath: './assets/町中_庭院.png' },
   ],
-  timeout: 5 * 60 * 1000,
-  interval: 500,
+  timeout: DEFAULT_TIMEOUT,
+  interval: DEFAULT_INTERVAL,
 }
 
-let config: Required<NavigatorConfig> = { ...defaultConfig }
+let mainSceneConfig: SceneConfig = { ...defaultMainSceneConfig }
 
 /**
- * 配置导航器
+ * 配置主界面场景
  */
-function configure(options: NavigatorConfig): void {
-  config = { ...config, ...options }
+function configure(options: Partial<SceneConfig>): void {
+  mainSceneConfig = { ...mainSceneConfig, ...options }
 }
 
 /**
- * 确保 UI 稳定（关闭弹窗、回到主界面）
+ * 通用导航函数：循环尝试点击步骤模板直到目标场景出现
  */
-function ensureStableUI(timeout?: number): boolean {
-  const actualTimeout = timeout ?? config.timeout
-  const endTime = Date.now() + actualTimeout
-  log.info(`ensureStableUI 开始, timeout=${actualTimeout}ms`)
+function navigateTo(
+  targetTemplate: TemplateFactoryOptions,
+  steps: TemplateFactoryOptions[],
+  timeout: number,
+  interval: number,
+  logPrefix: string
+): boolean {
+  const endTime = Date.now() + timeout
+  log.info(`${logPrefix} 开始, timeout=${timeout}ms`)
 
   let iteration = 0
   while (Date.now() < endTime) {
@@ -66,66 +68,98 @@ function ensureStableUI(timeout?: number): boolean {
     const remaining = endTime - Date.now()
     log.debug(`迭代 #${iteration}, 剩余时间=${remaining}ms`)
 
-    log.debug(`检查主界面模板: ${JSON.stringify(config.mainSceneTemplate)}`)
-    if ($(config.mainSceneTemplate).exists()) {
-      log.info(`主界面已找到, 迭代 #${iteration}`)
+    if ($(targetTemplate).exists()) {
+      log.info(`${logPrefix} 目标已找到, 迭代 #${iteration}`)
       return true
     }
-    log.debug('主界面未找到, 尝试关闭弹窗')
+    log.debug('目标未找到, 尝试点击步骤')
 
-    let closed = false
-    for (let i = 0; i < config.closeTemplates.length; i++) {
-      const template = config.closeTemplates[i]
-      log.debug(`尝试关闭模板 [${i}]: ${JSON.stringify(template)}`)
-      const matchResult = $(template).match()
-      if (matchResult.click()) {
-        log.info(`成功点击关闭模板 [${i}]: ${JSON.stringify(template)}`)
-        closed = true
-        sleep(config.interval)
+    let clicked = false
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i]
+      log.debug(`尝试步骤 [${i}]: ${JSON.stringify(step)}`)
+      if ($(step).match().click()) {
+        log.info(`成功点击步骤 [${i}]: ${JSON.stringify(step)}`)
+        clicked = true
+        sleep(interval)
         break
       }
     }
 
-    if (!closed) {
-      log.debug(`本次迭代未找到可关闭弹窗, 等待 ${config.interval}ms`)
-      sleep(config.interval)
+    if (!clicked) {
+      log.debug(`本次迭代未找到可点击步骤, 等待 ${interval}ms`)
+      sleep(interval)
     }
   }
 
-  log.warn('ensureStableUI 超时, 最终检查主界面')
-  const finalResult = $(config.mainSceneTemplate).exists()
+  log.warn(`${logPrefix} 超时, 最终检查目标`)
+  const finalResult = $(targetTemplate).exists()
   log.info(`最终结果: ${finalResult}`)
   return finalResult
 }
 
 /**
- * 确保任务在正确场景
+ * 确保 UI 稳定（关闭弹窗、回到主界面）
+ */
+function ensureStableUI(timeout?: number): boolean {
+  return navigateTo(
+    mainSceneConfig.targetTemplate,
+    mainSceneConfig.navigationSteps ?? [],
+    timeout ?? mainSceneConfig.timeout ?? DEFAULT_TIMEOUT,
+    mainSceneConfig.interval ?? DEFAULT_INTERVAL,
+    'ensureStableUI'
+  )
+}
+
+/**
+ * 导航到指定场景
+ */
+function navigateToScene(sceneConfig: SceneConfig): boolean {
+  const steps = sceneConfig.navigationSteps ?? []
+  if (steps.length === 0) {
+    log.info('无导航步骤，检查是否已在目标场景')
+    return $(sceneConfig.targetTemplate).exists()
+  }
+
+  return navigateTo(
+    sceneConfig.targetTemplate,
+    steps,
+    sceneConfig.timeout ?? DEFAULT_SCENE_TIMEOUT,
+    sceneConfig.interval ?? DEFAULT_INTERVAL,
+    'navigateToScene'
+  )
+}
+
+/**
+ * 确保任务在正确场景（基于声明式 sceneConfig）
  */
 function ensureScene(task: Task): boolean {
-  if (task.isInScene?.()) {
+  const sceneConfig = (task.constructor as typeof Task).sceneConfig
+  if (!sceneConfig) {
     return true
   }
 
-  log.info('尝试恢复任务场景')
+  if ($(sceneConfig.targetTemplate).exists()) {
+    log.info('已在目标场景')
+    return true
+  }
+
+  log.info('尝试导航到任务场景')
 
   if (!ensureStableUI()) {
     log.warn('无法回到主界面')
     return false
   }
 
-  try {
-    task.entryScene?.()
-  }
-  catch (e) {
-    log.error(`导航到任务场景失败: ${e}`)
-    return false
-  }
-
-  return task.isInScene?.() ?? true
+  return navigateToScene(sceneConfig)
 }
 
 export const Navigator = {
   configure,
   ensureStableUI,
-  ensureScene
+  ensureScene,
+  navigateToScene,
+  DEFAULT_TIMEOUT,
+  DEFAULT_INTERVAL,
+  DEFAULT_SCENE_TIMEOUT
 }

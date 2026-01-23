@@ -529,15 +529,16 @@ class TaskRunner {
       clickUntilGone: (clickFn, interval) => this.clickUntilGone(clickFn, interval),
     })
 
-    this.ensureScene(frame.task)
-
-    // 调用 onEnter('resume') 钩子（恢复任务）
+    // 先调用 onEnter('resume')，让任务有机会做准备工作
     try {
       frame.task.onEnter?.(EnterReason.RESUME)
     }
     catch (e) {
       this.log.error(`onEnter(resume) 异常: ${e}`)
     }
+
+    // 再确保场景正确
+    this.ensureScene(frame.task)
 
     this.log.info('已恢复主任务')
   }
