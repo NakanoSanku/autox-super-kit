@@ -44,6 +44,11 @@ interface TaskHandle {
 }
 
 /**
+ * Task 运行标记 Symbol
+ */
+const TASK_RUNNING_SYMBOL = Symbol('__taskRunning')
+
+/**
  * 任务运行器
  */
 class TaskRunner {
@@ -60,6 +65,8 @@ class TaskRunner {
   private result: TaskResult | null = null
   private inInterrupt = false
   private log = createLogger('TaskRunner')
+  private runId = 0
+  private activeRunId = 0
 
   /**
    * 获取当前状态
@@ -76,18 +83,28 @@ class TaskRunner {
       throw new Error('Runner is already running')
     }
 
+    if ((task as any)[TASK_RUNNING_SYMBOL]) {
+      throw new Error('Task instance is already running in another runner')
+    }
+
     this.reset()
+    this.runId++
+    this.activeRunId = this.runId
     this.currentTask = task
     this.currentOptions = options ?? {}
-    this._state = RunnerState.RUNNING
+    this._state = RunnerState.RUNNING;
+    (task as any)[TASK_RUNNING_SYMBOL] = true
 
     const self = this
+    const myRunId = this.activeRunId
 
     threads.start(() => {
       try {
-        self.runTask()
+        self.runTask(myRunId)
       }
       catch (e) {
+        if (self.activeRunId !== myRunId)
+          return
         self.log.error(`任务执行异常: ${e}`)
         self.result = {
           successCount: self.ctx.count,
@@ -100,7 +117,12 @@ class TaskRunner {
         self.emit('error', e)
       }
       finally {
-        self.emit('finish', self.result)
+        if (self.currentTask) {
+          (self.currentTask as any)[TASK_RUNNING_SYMBOL] = false
+        }
+        if (self.activeRunId === myRunId) {
+          self.emit('finish', self.result)
+        }
       }
     })
 
@@ -238,7 +260,7 @@ class TaskRunner {
     this.eventListeners.clear()
   }
 
-  private runTask(): void {
+  private runTask(runId: number): void {
     const task = this.currentTask!
     const options = this.currentOptions
     const times = options.times ?? Infinity
@@ -249,7 +271,7 @@ class TaskRunner {
       times,
       loops: 0,
       startTime: Date.now(),
-      params: options.params ?? {},
+      params: this.deepCloneState(options.params ?? {}),
     }
 
     task._injectContext(this.ctx)
@@ -259,9 +281,11 @@ class TaskRunner {
       clickUntilGone: (clickFn, interval) => this.clickUntilGone(clickFn, interval),
     })
 
+    Navigator.setStopChecker(() => this.isStopped() || this.activeRunId !== runId)
+    Navigator.setInterruptibleSleep(ms => this.sleep(ms))
+
     this.emit('start')
 
-    // 记录离开原因
     let leaveReason: LeaveReason = LeaveReason.COMPLETE
 
     try {
@@ -273,9 +297,9 @@ class TaskRunner {
     }
 
     try {
-      while (this.ctx.count < times && !this.isStopped()) {
+      while (this.ctx.count < times && !this.isStopped() && this.activeRunId === runId) {
         this.checkPause()
-        if (this.isStopped()) {
+        if (this.isStopped() || this.activeRunId !== runId) {
           leaveReason = LeaveReason.STOP
           break
         }
@@ -289,6 +313,9 @@ class TaskRunner {
           result = ExecuteResult.ERROR
         }
 
+        if (this.activeRunId !== runId)
+          break
+
         this.ctx.loops++
         this.emit('loop', { result, loops: this.ctx.loops })
 
@@ -298,7 +325,6 @@ class TaskRunner {
           case ExecuteResult.SUCCESS:
             this.ctx.count++
             this.emit('success', { count: this.ctx.count })
-            // 只在 SUCCESS 时才检查中断（安全中断点）
             this.pollInterrupt()
             break
           case ExecuteResult.STOP:
@@ -333,7 +359,12 @@ class TaskRunner {
       catch (e) {
         this.log.error(`onLeave 异常: ${e}`)
       }
+      Navigator.setStopChecker(null)
+      Navigator.setInterruptibleSleep(null)
     }
+
+    if (this.activeRunId !== runId)
+      return
 
     if (!this.result) {
       this.result = {
