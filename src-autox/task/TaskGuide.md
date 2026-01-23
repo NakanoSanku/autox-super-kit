@@ -10,6 +10,7 @@
 - [API 参考](#api-参考)
 - [高级功能](#高级功能)
 - [最佳实践](#最佳实践)
+- [已知限制与注意事项](#已知限制与注意事项)
 
 ---
 
@@ -76,11 +77,20 @@ class YuHunTask extends Task {
   // 声明需要在中断时保存的状态字段
   static stateKeys = ['failureCount']
 
+  // 声明式场景配置（可选）
+  static sceneConfig = {
+    targetTemplate: { templatePath: 'assets/yuhun/scene.png' },
+    navigationSteps: [
+      { templatePath: 'assets/explore.png' },
+      { templatePath: 'assets/yuhun_entry.png' },
+    ],
+  }
+
   private failureCount = 0
   private readonly maxFailures = 4
 
-  setup() {
-    this.log.info('御魂任务开始')
+  onEnter(reason: 'start' | 'resume') {
+    this.log.info(`御魂任务${reason === 'start' ? '开始' : '恢复'}`)
   }
 
   execute(): ExecuteResult {
@@ -112,8 +122,8 @@ class YuHunTask extends Task {
     return ExecuteResult.CONTINUE
   }
 
-  cleanup() {
-    this.log.info('御魂任务结束')
+  onLeave(reason: 'complete' | 'suspend' | 'stop' | 'error') {
+    this.log.info(`御魂任务结束: ${reason}`)
   }
 }
 
@@ -188,6 +198,30 @@ execute(): ExecuteResult {
 }
 ```
 
+### 任务生命周期
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                       任务生命周期                            │
+├──────────────────────────────────────────────────────────────┤
+│  onEnter('start')                                            │
+│       ↓                                                      │
+│  ┌─→ execute() → SUCCESS → 检查中断队列 ─┐                   │
+│  │       ↓                               │                   │
+│  │   CONTINUE                            │                   │
+│  │       ↓                               │                   │
+│  └── sleep(interval) ←───────────────────┘                   │
+│                                                              │
+│  中断发生时:                                                  │
+│    onLeave('suspend') → 保存状态 → 执行中断任务               │
+│    → 恢复状态 → onEnter('resume') → 继续 execute()           │
+│                                                              │
+│  正常结束: onLeave('complete')                                │
+│  外部停止: onLeave('stop')                                    │
+│  发生错误: onLeave('error')                                   │
+└──────────────────────────────────────────────────────────────┘
+```
+
 ### stateKeys（状态字段声明）
 
 当任务被中断时，框架会保存 `stateKeys` 中声明的字段，恢复时自动还原：
@@ -202,6 +236,8 @@ class MyTask extends Task {
   private readonly maxFailures = 4  // ← 不会被保存（常量无需保存）
 }
 ```
+
+> ⚠️ **重要**：`stateKeys` 中声明的字段必须是 **JSON 可序列化** 的基本类型或普通对象。不支持 `Date`、`Map`、`Set`、函数、类实例或循环引用。
 
 ### 可中断操作
 
@@ -221,6 +257,12 @@ $({ text: '按钮' }).wait(30000)
 this.runner.waitUntil(
   () => $({ text: '按钮' }).exists(),
   30000
+)
+
+// ✅ 持续点击直到目标消失
+this.runner.clickUntilGone(
+  () => $({ templatePath: 'close.png' }).match().click(),
+  1000
 )
 ```
 
@@ -248,19 +290,23 @@ this.runner.waitUntil(
 
 ```typescript
 abstract class Task {
-  // 由 Runner 注入
-  protected ctx: TaskContext
-  protected log: Logger
-  protected runner: { sleep, waitUntil }
+  // 静态配置
+  static stateKeys: string[] = []        // 需要保存的状态字段
+  static sceneConfig?: SceneConfig       // 场景配置（声明式导航）
 
-  // 需要实现
+  // 运行时引用（由 Runner 注入）
+  protected ctx: TaskContext             // 任务上下文
+  protected log: Logger                  // 日志记录器
+  protected runner: {                    // 可中断操作
+    sleep(ms: number): void
+    waitUntil(condition: () => boolean, timeout?: number, interval?: number): boolean
+    clickUntilGone(clickFn: () => boolean, interval?: number): boolean
+  }
+
+  // 生命周期方法
+  onEnter?(reason: 'start' | 'resume'): void
   abstract execute(): ExecuteResult
-
-  // 可选实现
-  setup?(): void           // 任务开始前调用一次
-  cleanup?(): void         // 任务结束后调用一次
-  isInScene?(): boolean    // 检测是否在任务场景内
-  entryScene?(): void      // 导航到任务入口场景
+  onLeave?(reason: 'complete' | 'suspend' | 'stop' | 'error'): void
 }
 ```
 
@@ -268,36 +314,29 @@ abstract class Task {
 
 ```typescript
 class TaskRunner {
-  // 启动任务，返回句柄
   start(task: Task, options?: RunnerOptions): TaskHandle
+  pause(): void
+  resume(): void
+  stop(): void
+  addInterrupt(request: InterruptRequest): void
+  readonly state: RunnerState
+}
 
-  // 可中断的睡眠
-  sleep(ms: number): void
-
-  // 可中断的条件等待
-  waitUntil(condition: () => boolean, timeout?: number, interval?: number): boolean
+interface TaskHandle {
+  pause(): void
+  resume(): void
+  stop(): void
+  readonly state: RunnerState
+  readonly context: TaskContext
+  on(event: TaskEventType, callback: TaskEventCallback): void
+  off(event: TaskEventType, callback: TaskEventCallback): void
+  wait(): TaskResult
 }
 
 interface RunnerOptions {
-  times?: number      // 执行次数，默认无限
-  interval?: number   // 循环间隔(ms)，默认 800
+  times?: number           // 执行次数，默认无限
+  interval?: number        // 循环间隔(ms)，默认 800
   params?: Record<string, any>  // 自定义参数
-}
-```
-
-### TaskHandle
-
-```typescript
-interface TaskHandle {
-  pause(): void       // 暂停任务
-  resume(): void      // 恢复任务
-  stop(): void        // 停止任务
-  
-  readonly state: RunnerState
-  readonly context: TaskContext
-  
-  on(event: TaskEventType, callback: (data?: any) => void): void
-  wait(): TaskResult  // 阻塞等待任务完成
 }
 ```
 
@@ -306,7 +345,9 @@ interface TaskHandle {
 ```typescript
 class TaskQueue {
   add(task: Task, options?: RunnerOptions): this
+  addAll(tasks: QueuedTask[]): this
   clear(): void
+  reset(): void
   readonly length: number
   readonly currentIndex: number
 }
@@ -322,6 +363,30 @@ queue
   .add(new DoujiTask(), { times: 10 })
 ```
 
+### Scheduler
+
+```typescript
+class Scheduler {
+  schedule(job: TimedJob): this      // 定时任务（每天固定时间）
+  every(job: IntervalJob): this      // 周期任务（间隔执行）
+  on(job: EventJob): this            // 事件任务（条件触发，并行执行）
+  remove(name: string): this         // 移除任务
+  start(queue: TaskQueue): QueueHandle
+  stop(): void
+}
+```
+
+### Navigator
+
+```typescript
+const Navigator = {
+  configure(options: Partial<SceneConfig>): void   // 配置主界面
+  ensureStableUI(timeout?: number): boolean        // 确保回到主界面
+  ensureScene(task: Task): boolean                 // 确保任务在正确场景
+  navigateToScene(sceneConfig: SceneConfig): boolean
+}
+```
+
 ---
 
 ## 高级功能
@@ -331,7 +396,7 @@ queue
 顺序执行多个任务：
 
 ```typescript
-import { TaskQueue, TaskRunner } from './task'
+import { Scheduler, TaskQueue } from './task'
 import { DoujiTask } from './tasks/DoujiTask'
 import { YuHunTask } from './tasks/YuHunTask'
 
@@ -344,8 +409,8 @@ queue
   .add(new YuHunTask(), { times: 50 })
   .add(new DoujiTask(), { times: 10 })
 
-const runner = new TaskRunner()
-const handle = runner.startQueue(queue)
+const scheduler = new Scheduler()
+const handle = scheduler.start(queue)
 
 // 控制
 handle.skip()   // 跳过当前任务，执行下一个
@@ -380,7 +445,7 @@ scheduler.every({
   priority: InterruptPriority.NORMAL,
 })
 
-// 突发事件：御魂爆满（在独立线程中并行执行）
+// 事件任务：御魂爆满（在独立线程中并行执行）
 scheduler.on({
   name: '御魂爆满',
   condition: () => $({ templatePath: 'assets/yuhun_full.png' }).exists(),
@@ -418,21 +483,20 @@ scheduler.on({
 })
 ```
 
-### 场景导航
+### 声明式场景导航
 
-实现 `isInScene()` 和 `entryScene()` 方法，框架会在中断恢复后自动导航回任务场景：
+使用静态 `sceneConfig` 声明任务的目标场景，框架会在中断恢复后自动导航：
 
 ```typescript
 class YuHunTask extends Task {
-  isInScene(): boolean {
-    return $({ text: '御魂' }).exists()
-  }
-
-  entryScene() {
-    $({ text: '探索' }).wait().click()
-    this.runner.sleep(1000)
-    $({ text: '御魂' }).wait().click()
-    this.runner.sleep(1000)
+  static sceneConfig = {
+    targetTemplate: { templatePath: 'assets/yuhun/scene.png' },
+    navigationSteps: [
+      { templatePath: 'assets/explore.png' },
+      { templatePath: 'assets/yuhun_entry.png' },
+    ],
+    timeout: 30000,  // 可选，默认 30000ms
+    interval: 500,   // 可选，默认 500ms
   }
 }
 ```
@@ -444,9 +508,13 @@ class YuHunTask extends Task {
     ↓
 恢复主任务状态（ctx + stateKeys 字段）
     ↓
-检查 isInScene()
+onEnter('resume')
+    ↓
+检查是否在目标场景
     ↓ 不在场景内
-调用 entryScene() 导航
+ensureStableUI() → 回到主界面
+    ↓
+navigateToScene() → 进入任务场景
     ↓
 继续 execute()
 ```
@@ -529,6 +597,61 @@ class AllInOneTask extends Task {
 }
 ```
 
+### 5. Task 实例不要并发复用
+
+**每次运行应使用新的 Task 实例**，避免在不同 Runner 或事件任务中复用同一实例：
+
+```typescript
+// ❌ 危险：同一实例可能被并发使用
+const sharedTask = new QingLiYuHunTask()
+scheduler.on({
+  task: sharedTask,  // 危险！
+})
+
+// ✅ 安全：每次使用新实例
+scheduler.on({
+  task: new QingLiYuHunTask(),
+})
+```
+
+---
+
+## 已知限制与注意事项
+
+### 1. Task 实例并发限制
+
+**Task 实例禁止并发运行**。Runner 会向 Task 注入 `ctx` 和 `runner` 引用，如果同一 Task 实例被多个 Runner 并发执行，会导致状态混乱。框架会自动检测并抛出异常。
+
+**建议**：
+- 每次运行任务时创建新的 Task 实例
+- 事件任务、定时任务、周期任务都应使用独立的 Task 实例
+
+### 2. 状态序列化限制
+
+`stateKeys` 中的字段使用 `JSON.stringify/parse` 进行深拷贝，以下类型**不被支持**：
+- `Date` 对象（会变成字符串）
+- `Map`、`Set`（会变成空对象）
+- 函数、类实例
+- 循环引用
+- `undefined`（会被丢弃）
+
+**建议**：只保存基本类型（number、string、boolean）和普通对象/数组。
+
+### 3. 事件监听器累积
+
+`TaskHandle.on()` 注册的监听器不会在任务重新运行时自动清除。如果需要多次运行同一 Runner，建议：
+
+```typescript
+// 运行前清除旧监听器
+runner.clearListeners()
+const handle = runner.start(task, options)
+handle.on('finish', callback)
+```
+
+### 4. Runner 重入限制
+
+一个 `TaskRunner` 实例在 RUNNING 或 PAUSED 状态时不能再次调用 `start()`，会抛出异常。如需并行运行多个任务，请创建多个 TaskRunner 实例。
+
 ---
 
 ## 目录结构
@@ -549,7 +672,8 @@ src-autox/
 │   ├── TaskQueue.ts        # 任务队列
 │   ├── Scheduler.ts        # 调度器
 │   ├── Navigator.ts        # 统一导航层
-│   └── index.ts            # 模块入口
+│   ├── index.ts            # 模块入口
+│   └── TaskGuide.md        # 本文档
 │
 └── tasks/                   # 具体任务实现
     ├── DoujiTask.ts        # 斗技
