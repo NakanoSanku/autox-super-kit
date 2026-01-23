@@ -16,6 +16,7 @@ const log = createLogger('Navigator')
 const DEFAULT_TIMEOUT = 5 * 60 * 1000
 const DEFAULT_INTERVAL = 500
 const DEFAULT_SCENE_TIMEOUT = 30000
+const CHECKPOINT_INTERVAL = 200
 
 /**
  * 主界面场景默认配置
@@ -43,10 +44,72 @@ const defaultMainSceneConfig: SceneConfig = {
 let mainSceneConfig: SceneConfig = { ...defaultMainSceneConfig }
 
 /**
+ * 可中断 sleep 函数类型
+ */
+type InterruptibleSleep = (ms: number) => void
+
+/**
+ * 停止检查函数类型
+ */
+type StopChecker = () => boolean
+
+/**
+ * 当前活动的停止检查器
+ */
+let activeStopChecker: StopChecker | null = null
+
+/**
+ * 当前活动的可中断 sleep
+ */
+let activeInterruptibleSleep: InterruptibleSleep | null = null
+
+/**
  * 配置主界面场景
  */
 function configure(options: Partial<SceneConfig>): void {
   mainSceneConfig = { ...mainSceneConfig, ...options }
+}
+
+/**
+ * 设置停止检查器（由 TaskRunner 调用）
+ */
+function setStopChecker(checker: StopChecker | null): void {
+  activeStopChecker = checker
+}
+
+/**
+ * 设置可中断 sleep（由 TaskRunner 调用）
+ */
+function setInterruptibleSleep(sleepFn: InterruptibleSleep | null): void {
+  activeInterruptibleSleep = sleepFn
+}
+
+/**
+ * 内部 sleep，支持中断
+ */
+function interruptibleSleep(ms: number): void {
+  if (activeInterruptibleSleep) {
+    activeInterruptibleSleep(ms)
+  }
+  else {
+    const endTime = Date.now() + ms
+    while (Date.now() < endTime) {
+      if (activeStopChecker?.()) {
+        return
+      }
+      const remaining = endTime - Date.now()
+      if (remaining > 0) {
+        sleep(Math.min(remaining, CHECKPOINT_INTERVAL))
+      }
+    }
+  }
+}
+
+/**
+ * 检查是否应该停止
+ */
+function shouldStop(): boolean {
+  return activeStopChecker?.() ?? false
 }
 
 /**
@@ -64,6 +127,11 @@ function navigateTo(
 
   let iteration = 0
   while (Date.now() < endTime) {
+    if (shouldStop()) {
+      log.info(`${logPrefix} 被中断停止`)
+      return false
+    }
+
     iteration++
     const remaining = endTime - Date.now()
     log.debug(`迭代 #${iteration}, 剩余时间=${remaining}ms`)
@@ -76,19 +144,24 @@ function navigateTo(
 
     let clicked = false
     for (let i = 0; i < steps.length; i++) {
+      if (shouldStop()) {
+        log.info(`${logPrefix} 被中断停止`)
+        return false
+      }
+
       const step = steps[i]
       log.debug(`尝试步骤 [${i}]: ${JSON.stringify(step)}`)
       if ($(step).match().click()) {
         log.info(`成功点击步骤 [${i}]: ${JSON.stringify(step)}`)
         clicked = true
-        sleep(interval)
+        interruptibleSleep(interval)
         break
       }
     }
 
     if (!clicked) {
       log.debug(`本次迭代未找到可点击步骤, 等待 ${interval}ms`)
-      sleep(interval)
+      interruptibleSleep(interval)
     }
   }
 
@@ -159,7 +232,9 @@ export const Navigator = {
   ensureStableUI,
   ensureScene,
   navigateToScene,
+  setStopChecker,
+  setInterruptibleSleep,
   DEFAULT_TIMEOUT,
   DEFAULT_INTERVAL,
-  DEFAULT_SCENE_TIMEOUT
+  DEFAULT_SCENE_TIMEOUT,
 }
