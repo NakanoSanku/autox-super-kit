@@ -197,6 +197,7 @@ function plugin_copy_file() {
       { src: 'src-autox/project.json', dest: 'out' },
       { src: 'src-autox/assets/**/*', dest: 'out/assets' },
       { src: 'src-autox/task/assets/**/*', dest: 'out/assets' },
+      { src: 'src-autox/tasks/assets/**/*', dest: 'out/assets' },
     ],
   })
 }
