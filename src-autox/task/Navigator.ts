@@ -3,8 +3,8 @@
  */
 
 import type { TemplateFactoryOptions } from '../core/matcher'
+import type { Task } from './Task'
 import type { SceneConfig } from './types'
-import { Task } from './Task'
 import { createLogger } from '../core/logger'
 import { $ } from '../core/matcher'
 
@@ -13,9 +13,8 @@ const log = createLogger('Navigator')
 /**
  * 默认配置常量
  */
-const DEFAULT_TIMEOUT = 5 * 60 * 1000
+const DEFAULT_TIMEOUT = 1 * 60 * 1000
 const DEFAULT_INTERVAL = 500
-const DEFAULT_SCENE_TIMEOUT = 30000
 const CHECKPOINT_INTERVAL = 200
 
 /**
@@ -120,7 +119,7 @@ function navigateTo(
   steps: TemplateFactoryOptions[],
   timeout: number,
   interval: number,
-  logPrefix: string
+  logPrefix: string,
 ): boolean {
   const endTime = Date.now() + timeout
   log.info(`${logPrefix} 开始, timeout=${timeout}ms`)
@@ -180,7 +179,7 @@ function ensureStableUI(timeout?: number): boolean {
     mainSceneConfig.navigationSteps ?? [],
     timeout ?? mainSceneConfig.timeout ?? DEFAULT_TIMEOUT,
     mainSceneConfig.interval ?? DEFAULT_INTERVAL,
-    'ensureStableUI'
+    'ensureStableUI',
   )
 }
 
@@ -197,14 +196,15 @@ function navigateToScene(sceneConfig: SceneConfig): boolean {
   return navigateTo(
     sceneConfig.targetTemplate,
     steps,
-    sceneConfig.timeout ?? DEFAULT_SCENE_TIMEOUT,
+    sceneConfig.timeout ?? DEFAULT_TIMEOUT,
     sceneConfig.interval ?? DEFAULT_INTERVAL,
-    'navigateToScene'
+    'navigateToScene',
   )
 }
 
 /**
  * 确保任务在正确场景（基于声明式 sceneConfig）
+ * 优化：先尝试直接导航，只有失败时才退回主界面重试
  */
 function ensureScene(task: Task): boolean {
   const sceneConfig = (task.constructor as typeof Task).sceneConfig
@@ -217,8 +217,12 @@ function ensureScene(task: Task): boolean {
     return true
   }
 
-  log.info('尝试导航到任务场景')
+  log.info('尝试从当前位置直接导航到任务场景')
+  if (navigateToScene(sceneConfig)) {
+    return true
+  }
 
+  log.info('直接导航失败，退回主界面后重试')
   if (!ensureStableUI()) {
     log.warn('无法回到主界面')
     return false
@@ -236,5 +240,4 @@ export const Navigator = {
   setInterruptibleSleep,
   DEFAULT_TIMEOUT,
   DEFAULT_INTERVAL,
-  DEFAULT_SCENE_TIMEOUT,
 }
