@@ -1,4 +1,6 @@
+import path from 'node:path'
 import { env } from 'node:process'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { viteSingleFile } from 'vite-plugin-singlefile'
@@ -14,6 +16,11 @@ console.log({
 // 把 src 目录的前端文件替换掉，
 // 其他的和普通的 vite 项目没有区别
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   build: {
     minify: 'esbuild',
     sourcemap: false,
@@ -22,6 +29,7 @@ export default defineConfig({
     legalComments: 'none', // 移除注释
   },
   plugins: [
+    tailwindcss(),
     react({
       babel: {
         plugins: [['babel-plugin-react-compiler']],

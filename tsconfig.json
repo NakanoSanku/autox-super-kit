@@ -1,5 +1,11 @@
 {
   // 根据不同的文件和目录, 配置不同的 tsconfig
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
   "references": [
     { "path": "./tsconfig.web.json" },
     { "path": "./tsconfig.node.json" },
