@@ -3,8 +3,69 @@
  * 集中管理所有模块的默认参数
  */
 
-import type { LogConfig } from './logger'
-import { LogLevel } from './logger'
+/**
+ * 日志级别枚举
+ * @description 定义日志的严重程度级别，数值越大级别越高
+ * @enum {number}
+ */
+export enum LogLevel {
+  /** 调试级别 - 最详细的日志信息，用于开发调试 */
+  DEBUG = 0,
+  /** 信息级别 - 一般性的运行信息 */
+  INFO = 1,
+  /** 警告级别 - 潜在问题或需要注意的情况 */
+  WARN = 2,
+  /** 错误级别 - 运行时错误，但程序可以继续运行 */
+  ERROR = 3,
+  /** 禁用级别 - 禁用所有日志输出 */
+  NONE = 4,
+}
+
+/**
+ * 日志配置接口
+ * @description 定义日志模块的可配置选项
+ */
+export interface LogConfig {
+  /**
+   * 日志输出级别
+   * @description 只有级别大于等于此值的日志才会被输出
+   * @default LogLevel.DEBUG
+   */
+  level: LogLevel
+
+  /**
+   * 是否显示 Toast 提示
+   * @description 启用后，WARN 及以上级别的日志会显示 Toast 通知
+   * @default false
+   */
+  showToast: boolean
+
+  /**
+   * 是否写入文件
+   * @description 启用后，日志会被持久化到文件系统
+   * @default false
+   */
+  writeToFile: boolean
+
+  /**
+   * 日志文件存储目录路径
+   * @default '/sdcard/autojs_logs/'
+   */
+  filePath: string
+
+  /**
+   * 日志文件名
+   * @default 'app.log'
+   */
+  fileName: string
+
+  /**
+   * 日志文件最大大小（字节）
+   * @description 超过此大小后会自动轮转，旧文件重命名为 .bak
+   * @default 5242880 (5MB)
+   */
+  maxFileSize: number
+}
 
 /** 日志模块默认配置 */
 export const defaultLogConfig: LogConfig = {
