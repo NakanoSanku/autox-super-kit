@@ -1,4 +1,4 @@
-import { humanClick } from "./action";
+import { ClickOptions, humanClick } from "./action";
 import { captureScreenEx } from "./capture";
 import { defaultMatcherConfig, defaultOcrConfig } from "./config";
 import { loadTemplate } from "./image";
@@ -24,7 +24,7 @@ interface IMatchResult {
      * 点击匹配到的区域
      * @returns 点击成功返回 true，失败返回 false
      */
-    click(): boolean;
+    click(options?: ClickOptions): boolean;
 
     /**
      * 对匹配结果执行自定义操作
@@ -64,16 +64,16 @@ class MatchResult implements IMatchResult {
     }
 
     /**
-     * 点击匹配到的区域
-     * @description 如果是单点则直接点击该点，否则在匹配区域内随机点击
+     * 人类化点击匹配区域
+     * @param options 点击选项（sigma、delay、duration）
      * @returns 始终返回 true
      */
-    click(): boolean {
+    click(options?: ClickOptions): boolean {
         if (this.isPoint()) {
             humanClick(this.leftTop.x, this.leftTop.y, 1, 1);
             return true;
         }
-        humanClick(this.leftTop.x, this.leftTop.y, this.rightBottom.x - this.leftTop.x, this.rightBottom.y - this.leftTop.y);
+        humanClick(this.leftTop.x, this.leftTop.y, this.rightBottom.x - this.leftTop.x, this.rightBottom.y - this.leftTop.y, options);
         return true;
     }
 
