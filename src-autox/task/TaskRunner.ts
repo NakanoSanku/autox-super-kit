@@ -296,6 +296,8 @@ class TaskRunner {
       throw e
     }
 
+    this.ensureScene(task)
+
     try {
       while (this.ctx.count < times && !this.isStopped() && this.activeRunId === runId) {
         this.checkPause()
