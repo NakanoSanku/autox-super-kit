@@ -15,6 +15,14 @@ interface ClickOptions {
   duration?: number
 }
 
+/** 矩形区域 */
+interface Rect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 /** 滑动选项 */
 interface SwipeOptions {
   /** 滑动时长 (ms)，默认 300-500 随机 */
@@ -234,13 +242,26 @@ function humanSwipe(
   }
 }
 
+/**
+ * 从矩形列表中随机选择一个进行人类化点击
+ * @param rects 矩形区域列表
+ * @param options 点击选项
+ */
+function humanClickRandom(rects: Rect[], options: ClickOptions = {}): void {
+  if (rects.length === 0) return
+  const rect = rects[Math.floor(Math.random() * rects.length)]
+  humanClick(rect.x, rect.y, rect.width, rect.height, options)
+}
+
 export {
   gaussianPoint,
   humanClick,
+  humanClickRandom,
   humanSwipe,
 }
 
 export type {
   ClickOptions,
+  Rect,
   SwipeOptions,
 }
