@@ -140,3 +140,6 @@ export const defaultOcrConfig: OcrConfig = {
   cpuThreadNum: 4,
   useSlim: true,
 }
+
+export const width = Math.max(device.width, device.height)
+export const height = Math.min(device.width, device.height)
