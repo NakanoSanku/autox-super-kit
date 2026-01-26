@@ -22,6 +22,7 @@ interface IMatchResult {
 
     /**
      * 点击匹配到的区域
+     * @param options 点击选项（sigma、delay、duration）
      * @returns 点击成功返回 true，失败返回 false
      */
     click(options?: ClickOptions): boolean;
@@ -70,7 +71,7 @@ class MatchResult implements IMatchResult {
      */
     click(options?: ClickOptions): boolean {
         if (this.isPoint()) {
-            humanClick(this.leftTop.x, this.leftTop.y, 1, 1);
+            humanClick(this.leftTop.x, this.leftTop.y, 1, 1, options);
             return true;
         }
         humanClick(this.leftTop.x, this.leftTop.y, this.rightBottom.x - this.leftTop.x, this.rightBottom.y - this.leftTop.y, options);
@@ -112,9 +113,10 @@ class NullMatchResult implements IMatchResult {
 
     /**
      * 点击匹配到的区域
+     * @param options 点击选项（sigma、delay、duration）
      * @returns 始终返回 false，因为没有匹配到目标
      */
-    click(): boolean {
+    click(options?: ClickOptions): boolean {
         return false;
     }
 
