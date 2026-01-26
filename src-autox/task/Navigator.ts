@@ -21,7 +21,7 @@ const CHECKPOINT_INTERVAL = 200
  * 主界面场景默认配置
  */
 const defaultMainSceneConfig: SceneConfig = {
-  targetTemplate: { templatePath: './assets/庭院_封.png' },
+  targetTemplate: { templatePath: './assets/庭院_索.png' },
   navigationSteps: [
     { templatePath: './assets/探索_退出_确认.png' },
     { templatePath: './assets/探索_章节_关闭.png' },
