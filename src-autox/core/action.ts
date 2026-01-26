@@ -3,7 +3,7 @@
  * 包括人类化点击和滑动
  */
 
-import { defaultActionConfig } from "./config"
+import { defaultActionConfig, width, height } from "./config"
 
 /** 点击选项 */
 interface ClickOptions {
@@ -209,7 +209,10 @@ function generateSwipePath(
     x += gaussianRandom(0, 1.5)
     y += gaussianRandom(0, 1.5)
 
-    path.push([Math.round(x), Math.round(y)])
+    x = clamp(Math.round(x), 0, width - 1)
+    y = clamp(Math.round(y), 0, height - 1)
+
+    path.push([x, y])
   }
 
   return path
